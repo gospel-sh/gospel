@@ -1,0 +1,20 @@
+{
+  "name": "gospel",
+  "version": "0.0.1",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "concurrently \"tsc --watch\" \"nodemon src/server.js\""
+  },
+  "author": "Andreas Dewes",
+  "license": "Apache 2.0",
+  "devDependencies": {
+    "concurrently": "^7.6.0",
+    "connect": "^3.7.0",
+    "nodemon": "^2.0.20",
+    "serve-static": "^1.15.0",
+    "typescript": "^4.9.5"
+  }
+}

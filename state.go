@@ -1,10 +1,5 @@
 package gospel
 
-import (
-	"fmt"
-	"runtime"
-)
-
 func If(condition any, args ...any) []any {
 
 	var c bool
@@ -74,16 +69,7 @@ func (s *StateVariable[T]) Set(value any) *Setter[T] {
 }
 
 func State[T any](c Context, value T) *StateVariable[T] {
-
-	pc, _, _, ok := runtime.Caller(1)
-
-	details := runtime.FuncForPC(pc)
-
-	if ok && details != nil {
-		fmt.Printf("called from %s\n", details.Name())
-	}
-
 	sv := &StateVariable[T]{c, value, ""}
-	c.AddState(details.Name(), sv)
+	c.AddState(sv)
 	return sv
 }

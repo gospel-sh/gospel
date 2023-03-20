@@ -6,6 +6,6 @@ import (
 
 type App struct {
 	Root         func(Context) Element
-	StaticFiles  fs.FS
+	StaticFiles  []fs.FS
 	StaticPrefix string
 }

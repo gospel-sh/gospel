@@ -21,10 +21,25 @@ func (f *PrefixFS) Open(name string) (fs.File, error) {
 	return f.fs.Open(name[len(f.prefix):])
 }
 
+type MultiFS struct {
+	fileSystems []fs.FS
+}
+
+func (m *MultiFS) Open(name string) (fs.File, error) {
+	var err error
+	var file fs.File
+	for _, fileSystem := range m.fileSystems {
+		if file, err = fileSystem.Open(name); err == nil {
+			return file, nil
+		}
+	}
+	return nil, err
+}
+
 func MakeServer(app *App) *Server {
 	return &Server{
 		app:        app,
-		fileServer: http.FileServer(http.FS(&PrefixFS{fs: app.StaticFiles, prefix: app.StaticPrefix})),
+		fileServer: http.FileServer(http.FS(&PrefixFS{fs: &MultiFS{append([]fs.FS{JS}, app.StaticFiles...)}, prefix: app.StaticPrefix})),
 		server: &http.Server{
 			Addr: ":8000",
 		},
@@ -38,7 +53,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := &DefaultContext{}
+	ctx := MakeDefaultContext()
 	elem := s.app.Root(ctx)
 
 	w.Header().Add("content-type", "text/html")
