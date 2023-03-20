@@ -32,14 +32,14 @@ func MakeServer(app *App) *Server {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := Context{}
-
-	elem := s.app.Root(ctx)
 
 	if strings.HasPrefix(r.URL.Path, s.app.StaticPrefix) {
 		s.fileServer.ServeHTTP(w, r)
 		return
 	}
+
+	ctx := &DefaultContext{}
+	elem := s.app.Root(ctx)
 
 	w.Header().Add("content-type", "text/html")
 
