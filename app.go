@@ -1,3 +1,11 @@
 package gospel
 
-type App func(Context) Element
+import (
+	"io/fs"
+)
+
+type App struct {
+	Root         func(Context) Element
+	StaticFiles  fs.FS
+	StaticPrefix string
+}

@@ -1,17 +1,30 @@
 package gospel
 
 import (
+	"io/fs"
 	"net/http"
+	"strings"
 )
 
 type Server struct {
-	server *http.Server
-	app    App
+	server     *http.Server
+	fileServer http.Handler
+	app        *App
 }
 
-func MakeServer(app App) *Server {
+type PrefixFS struct {
+	fs     fs.FS
+	prefix string
+}
+
+func (f *PrefixFS) Open(name string) (fs.File, error) {
+	return f.fs.Open(name[len(f.prefix):])
+}
+
+func MakeServer(app *App) *Server {
 	return &Server{
-		app: app,
+		app:        app,
+		fileServer: http.FileServer(http.FS(&PrefixFS{fs: app.StaticFiles, prefix: app.StaticPrefix})),
 		server: &http.Server{
 			Addr: ":8000",
 		},
@@ -21,12 +34,17 @@ func MakeServer(app App) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := Context{}
 
-	elem := s.app(ctx)
+	elem := s.app.Root(ctx)
+
+	if strings.HasPrefix(r.URL.Path, s.app.StaticPrefix) {
+		s.fileServer.ServeHTTP(w, r)
+		return
+	}
 
 	w.Header().Add("content-type", "text/html")
 
 	w.WriteHeader(200)
-	w.Write([]byte(elem.Render(ctx)))
+	w.Write([]byte(elem.RenderElement(ctx)))
 }
 
 func (s *Server) Start() error {
