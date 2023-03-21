@@ -115,6 +115,73 @@ type Fragment struct {
 	Children []Element
 }
 
+type HTMLElementDecorator func(*HTMLElement)
+
+func mapHTMLAttributes(attribs []Attribute, mapper func(*HTMLAttribute) []Attribute) []Attribute {
+	newAttribs := make([]Attribute, 0, len(attribs))
+
+	for _, attrib := range attribs {
+		if htmlAttrib, ok := attrib.(*HTMLAttribute); ok {
+			newAttribs = append(newAttribs, mapper(htmlAttrib)...)
+		}
+	}
+
+	return newAttribs
+
+}
+
+func Assignable() HTMLElementDecorator {
+	return func(element *HTMLElement) {
+
+		assignableMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+
+			if htmlAttrib.Name == "value" {
+				v, ok := htmlAttrib.Value.(ContextVarObj)
+				if !ok {
+					Log.Warning("uh oh")
+					return nil
+				}
+
+				return []Attribute{&HTMLAttribute{
+					Name:  "gospel-value",
+					Value: v.GetRaw(),
+				}}
+			}
+
+			return []Attribute{htmlAttrib}
+		}
+
+		element.Attributes = mapHTMLAttributes(element.Attributes, assignableMapper)
+
+	}
+}
+
+func Submittable() HTMLElementDecorator {
+	// Check if there's an OnSubmit attribute with a callback
+	// If given, add some JS code to ensure we call it
+	return func(element *HTMLElement) {
+
+		submitMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+			if htmlAttrib.Name == "onSubmit" {
+				f, ok := htmlAttrib.Value.(ContextFuncObj)
+				if !ok {
+					Log.Warning("uh oh")
+					return nil
+				}
+
+				return []Attribute{&HTMLAttribute{
+					Name:  "gospel-onSubmit",
+					Value: f.Id(),
+				}}
+			}
+
+			return []Attribute{htmlAttrib}
+		}
+
+		element.Attributes = mapHTMLAttributes(element.Attributes, submitMapper)
+	}
+}
+
 func (f *Fragment) RenderElement(c Context) string {
 	renderedElements := ""
 
@@ -131,15 +198,30 @@ func F(args ...any) Element {
 	}
 }
 
-func Tag(tag string) func(args ...any) Element {
+func makeTag(tag string, args []any, void bool, decorators []any) Element {
+
+	element := &HTMLElement{tag, void, children(args...), attributes(args...)}
+
+	// we apply all decorators to the element
+	for _, decorator := range decorators {
+		if df, ok := decorator.(HTMLElementDecorator); ok {
+			df(element)
+		}
+	}
+
+	return element
+
+}
+
+func Tag(tag string, decorators ...any) func(args ...any) Element {
 	return func(args ...any) Element {
-		return &HTMLElement{tag, false, children(args...), attributes(args...)}
+		return makeTag(tag, args, false, decorators)
 	}
 }
 
-func VoidTag(tag string) func(args ...any) Element {
+func VoidTag(tag string, decorators ...any) func(args ...any) Element {
 	return func(args ...any) Element {
-		return &HTMLElement{tag, true, children(args...), attributes(args...)}
+		return makeTag(tag, args, true, decorators)
 	}
 }
 
@@ -169,7 +251,7 @@ var Div = Tag("div")
 var Title = Tag("title")
 var Head = Tag("head")
 var Body = Tag("body")
-var StyleTag = Tag("style")
+var StyleTag = Tag("style") // renamed as it clashes with 'Style' helper
 var Address = Tag("address")
 var Aside = Tag("aside")
 var Header = Tag("header")
@@ -221,7 +303,7 @@ var Sub = Tag("sub")
 var Sup = Tag("sup")
 var Time = Tag("time")
 var U = Tag("u")
-var Var = Tag("var")
+var VarTag = Tag("var") // renamed as it clashes with 'Var'
 var Map = Tag("map")
 var Video = Tag("video")
 var Iframe = Tag("iframe")
@@ -247,7 +329,7 @@ var Tr = Tag("tr")
 var Button = Tag("button")
 var Datalist = Tag("datalist")
 var Fieldset = Tag("fieldset")
-var Form = Tag("form")
+var Form = Tag("form", Submittable())
 var Label = Tag("label")
 var Legend = Tag("legend")
 var Meter = Tag("meter")
@@ -273,7 +355,7 @@ var Command = VoidTag("command")
 var Embed = VoidTag("embed")
 var Hr = VoidTag("hr")
 var Img = VoidTag("img")
-var Input = VoidTag("input")
+var Input = VoidTag("input", Assignable())
 var Keygen = VoidTag("keygen")
 var Link = VoidTag("link")
 var Meta = VoidTag("meta")

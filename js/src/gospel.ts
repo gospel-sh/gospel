@@ -7,3 +7,5 @@ declare global {
 }
 
 window.gospel = gospel;
+
+gospel.init();

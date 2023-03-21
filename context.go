@@ -6,8 +6,8 @@ import (
 
 type Context interface {
 	Key(string) Context
-	AddState(variable ContextStateVariable)
-	AddCallback(callback ContextCallbackFunction)
+	AddVar(variable ContextVarObj)
+	AddFunc(callback ContextFuncObj)
 }
 
 type DefaultContext struct {
@@ -17,8 +17,8 @@ type DefaultContext struct {
 }
 
 type Store struct {
-	Variables map[string][]ContextStateVariable
-	Callbacks map[string][]ContextCallbackFunction
+	Variables map[string][]ContextVarObj
+	Funcs     map[string][]ContextFuncObj
 }
 
 func MakeDefaultContext() *DefaultContext {
@@ -34,17 +34,17 @@ func MakeDefaultContext() *DefaultContext {
 
 func MakeStore() *Store {
 	return &Store{
-		Variables: make(map[string][]ContextStateVariable),
-		Callbacks: make(map[string][]ContextCallbackFunction),
+		Variables: make(map[string][]ContextVarObj),
+		Funcs:     make(map[string][]ContextFuncObj),
 	}
 }
 
-func (s *Store) AddCallback(key string, callback ContextCallbackFunction) int {
-	s.Callbacks[key] = append(s.Callbacks[key], callback)
-	return len(s.Callbacks[key])
+func (s *Store) AddFunc(key string, callback ContextFuncObj) int {
+	s.Funcs[key] = append(s.Funcs[key], callback)
+	return len(s.Funcs[key])
 }
 
-func (s *Store) AddState(key string, variable ContextStateVariable) int {
+func (s *Store) AddVar(key string, variable ContextVarObj) int {
 	s.Variables[key] = append(s.Variables[key], variable)
 	return len(s.Variables[key])
 }
@@ -57,15 +57,15 @@ func (d *DefaultContext) Key(key string) Context {
 	}
 }
 
-func (d *DefaultContext) AddCallback(callback ContextCallbackFunction) {
-	i := d.root.Store.AddCallback(d.key, callback)
-	Log.Info("Adding callback %s:%d", d.key, i)
-	callback.SetId(fmt.Sprintf("%s:%d", i))
+func (d *DefaultContext) AddFunc(callback ContextFuncObj) {
+	i := d.root.Store.AddFunc(d.key, callback)
+	Log.Info("Adding callback %s.%d", d.key, i)
+	callback.SetId(fmt.Sprintf("%s.%d", d.key, i))
 
 }
 
-func (d *DefaultContext) AddState(variable ContextStateVariable) {
-	i := d.root.Store.AddState(d.key, variable)
-	Log.Info("Adding state %s:%d", d.key, i)
-	variable.SetId(fmt.Sprintf("%s:%d", i))
+func (d *DefaultContext) AddVar(variable ContextVarObj) {
+	i := d.root.Store.AddVar(d.key, variable)
+	Log.Info("Adding state %s.%d", d.key, i)
+	variable.SetId(fmt.Sprintf("%s.%d", d.key, i))
 }
