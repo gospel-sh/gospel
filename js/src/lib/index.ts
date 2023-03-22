@@ -4,9 +4,9 @@ function initGospel() {
 	const submittables = document.querySelectorAll("[gospel-onSubmit]");
 	for(const [_, submittable] of submittables.entries()){
 		console.log("adding onSubmit handler...");
-		(submittable as HTMLFormElement).onsubmit = (e: Event) => {
+		(submittable as HTMLFormElement).onsubmit = (_: Event) => {
 			console.log("submitting...");
-			e.preventDefault();
+			// e.preventDefault();
 		}
 	}
 }

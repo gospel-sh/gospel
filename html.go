@@ -20,9 +20,10 @@ type HTMLElement struct {
 }
 
 type HTMLAttribute struct {
-	Name  string
-	Value any
-	Args  []any
+	Name   string
+	Hidden bool
+	Value  any
+	Args   []any
 }
 
 func Attrib(tag string) func(value any, args ...any) *HTMLAttribute {
@@ -36,6 +37,10 @@ func Attrib(tag string) func(value any, args ...any) *HTMLAttribute {
 }
 
 func (a *HTMLAttribute) RenderAttribute(c Context) string {
+
+	if a.Hidden {
+		return ""
+	}
 
 	extraArgs := ""
 
@@ -57,7 +62,14 @@ func (h *HTMLElement) RenderElement(c Context) string {
 	renderedAttributes := ""
 
 	for _, attribute := range h.Attributes {
-		renderedAttributes += " " + attribute.RenderAttribute(c)
+
+		ra := attribute.RenderAttribute(c)
+
+		if ra == "" {
+			continue
+		}
+
+		renderedAttributes += " " + ra
 	}
 
 	if h.Void {
@@ -138,13 +150,19 @@ func Assignable() HTMLElementDecorator {
 			if htmlAttrib.Name == "value" {
 				v, ok := htmlAttrib.Value.(ContextVarObj)
 				if !ok {
-					Log.Warning("uh oh")
+					Log.Warning("uh oh: not a HTML attribute")
 					return nil
 				}
 
-				return []Attribute{&HTMLAttribute{
-					Name:  "gospel-value",
+				htmlAttrib.Name = "gospel-value"
+				htmlAttrib.Hidden = true
+
+				return []Attribute{htmlAttrib, &HTMLAttribute{
+					Name:  "value",
 					Value: v.GetRaw(),
+				}, &HTMLAttribute{
+					Name:  "name",
+					Value: v.Id(),
 				}}
 			}
 
@@ -153,6 +171,46 @@ func Assignable() HTMLElementDecorator {
 
 		element.Attributes = mapHTMLAttributes(element.Attributes, assignableMapper)
 
+	}
+}
+
+func assignVars(c Context, form map[string][]string, element *HTMLElement) {
+	for _, child := range element.Children {
+		htmlChild, ok := child.(*HTMLElement)
+
+		if !ok {
+			continue
+		}
+
+		valueMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+
+			Log.Info("Name: %s", htmlAttrib.Name)
+
+			if htmlAttrib.Name == "gospel-value" {
+				v, ok := htmlAttrib.Value.(ContextVarObj)
+
+				if !ok {
+					Log.Warning("uh oh: not a context var")
+					return nil
+				}
+
+				Log.Info("Variable: %s", v.Id())
+
+				if values, ok := form[v.Id()]; ok && len(values) > 0 {
+					value := values[0]
+					v.Set(value)
+				}
+
+			}
+			return nil
+		}
+
+		mapHTMLAttributes(htmlChild.Attributes, valueMapper)
+
+		// we recurse into child elements...
+		assignVars(c, form, htmlChild)
+
+		Log.Info("%s", htmlChild.Tag)
 	}
 }
 
@@ -165,8 +223,33 @@ func Submittable() HTMLElementDecorator {
 			if htmlAttrib.Name == "onSubmit" {
 				f, ok := htmlAttrib.Value.(ContextFuncObj)
 				if !ok {
-					Log.Warning("uh oh")
+					Log.Warning("uh oh: not a function")
 					return nil
+				}
+
+				c := f.Context()
+
+				router := UseRouter(c)
+
+				req := router.Request()
+				Log.Info("%s:%s", req.URL.Path, req.Method)
+
+				if req.Method == "POST" && c.Interactive() {
+
+					if err := req.ParseForm(); err != nil {
+						Log.Error("Cannot parse form: %v", err)
+						return nil
+					}
+
+					// we update variables based on form content
+					assignVars(c, req.Form, element)
+
+					// we call the function
+
+					f.Call()
+
+					Log.Info("%v", req.Form)
+
 				}
 
 				return []Attribute{&HTMLAttribute{
@@ -242,6 +325,7 @@ var OnSubmit = Attrib("onSubmit")
 var Name = Attrib("name")
 var Value = Attrib("value")
 var Style = Attrib("style")
+var Method = Attrib("method")
 
 // HTML Tags
 // https://www.w3.org/TR/2011/WD-html-markup-20110113/syntax.html

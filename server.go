@@ -54,7 +54,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := MakeDefaultContext()
-	elem := s.app.Root(ctx)
+
+	// we set up the router...
+	router := MakeRouter(r)
+	router.SetContext(ctx)
+
+	elem := ctx.Execute(s.app.Root)
 
 	w.Header().Add("content-type", "text/html")
 

@@ -38,53 +38,74 @@ func (s *VarObj[T]) GetRaw() any {
 	return s.value
 }
 
-func (s *VarObj[T]) Set(value any) *Setter[T] {
-	if sv, ok := value.(T); ok {
-		return &Setter[T]{s, sv}
-	} else {
-		// to do: coerce
-		return nil
+func (s *VarObj[T]) Set(value any) {
+	if tv, ok := value.(T); ok {
+		s.value = tv
 	}
 }
 
 type ContextVarObj interface {
 	SetId(string)
 	Id() string
+	Set(any)
 	GetRaw() any
 }
 
-type Setter[T any] struct {
-	variable *VarObj[T]
-	value    T
-}
-
-type FuncObj[T any] struct {
+type FuncObj struct {
 	context Context
-	value   T
+	value   func()
 	id      string
 }
 
-func (c *FuncObj[T]) SetId(id string) {
+func (c *FuncObj) SetId(id string) {
 	c.id = id
 }
 
-func (c *FuncObj[T]) Id() string {
+func (c *FuncObj) Call() {
+	if c.context.Interactive() {
+		c.value()
+	}
+}
+
+func (c *FuncObj) Id() string {
 	return c.id
 }
 
-type ContextFuncObj interface {
-	SetId(string)
-	Id() string
+func (c *FuncObj) Context() Context {
+	return c.context
 }
 
-func Func[T any](c Context, value T) *FuncObj[T] {
-	cf := &FuncObj[T]{c, value, ""}
-	c.AddFunc(cf)
+func Convert[T any](v any) T {
+	if vv, ok := v.(T); ok {
+		return vv
+	}
+	return *new(T)
+}
+
+type ContextFuncObj interface {
+	Context() Context
+	SetId(string)
+	Id() string
+	Call()
+}
+
+type Opts struct {
+	Foo string
+}
+
+func Func(c Context, value func()) *FuncObj {
+
+	var f Opts = Convert[Opts](Opts{"Test"})
+
+	Log.Info("%v", f)
+
+	cf := &FuncObj{c, value, ""}
+	c.AddFunc(cf, "")
 	return cf
 }
 
 func Var[T any](c Context, value T) *VarObj[T] {
 	sv := &VarObj[T]{c, value, ""}
-	c.AddVar(sv)
+	c.AddVar(sv, "")
 	return sv
 }
