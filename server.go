@@ -53,13 +53,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := MakeDefaultContext()
+	ctx := MakeDefaultContext(r)
 
-	// we set up the router...
-	router := MakeRouter(r)
-	router.SetContext(ctx)
+	// we set up the router (it adds itself to the context)...
+	MakeRouter(ctx)
 
 	elem := ctx.Execute(s.app.Root)
+
+	if redirectedTo := ctx.RedirectedTo(); redirectedTo != "" && redirectedTo != r.URL.Path {
+		http.Redirect(w, r, redirectedTo, 302)
+		return
+	}
 
 	w.Header().Add("content-type", "text/html")
 

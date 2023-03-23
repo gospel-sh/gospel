@@ -6,28 +6,26 @@ import (
 )
 
 type Router struct {
-	request  *http.Request
 	context  Context
 	variable *VarObj[*Router]
 }
 
-func MakeRouter(request *http.Request) *Router {
-	return &Router{
-		request: request,
+func MakeRouter(context Context) *Router {
+	router := &Router{
+		context: context,
 	}
+
+	router.variable = &VarObj[*Router]{context, router, ""}
+	context.AddVar(router.variable, "router")
+
+	return router
 }
 
 type Route struct {
 }
 
 func (r *Router) Request() *http.Request {
-	return r.request
-}
-
-func (r *Router) SetContext(c Context) {
-	r.context = c
-	r.variable = &VarObj[*Router]{c, r, ""}
-	c.AddVar(r.variable, "router")
+	return r.context.Request()
 }
 
 func (r *Router) Context() Context {
@@ -43,9 +41,16 @@ func (r *Router) RedirectTo(url string) {
 	r.context.Modified(r.variable)
 }
 
+func (r *Router) Matches(route string) bool {
+	if strings.HasPrefix(r.context.Request().URL.Path, route) {
+		return true
+	}
+	return false
+}
+
 func (r *Router) Match(route string, elementFunc ElementFunction) Element {
 
-	if strings.HasPrefix(r.request.URL.Path, route) {
+	if strings.HasPrefix(r.context.Request().URL.Path, route) {
 		return elementFunc(r.context)
 	}
 
@@ -57,14 +62,10 @@ func UseRouter(c Context) *Router {
 	// check if router is defined in context already
 	// if so, return it
 
-	routerVar := c.GetVar("router", 1)
+	routerVar := GetVar[*Router](c, "router")
 
-	if routerVar == nil {
-		return nil
-	}
-
-	if router, ok := routerVar.GetRaw().(*Router); ok {
-		return router
+	if routerVar != nil {
+		return routerVar.Get()
 	}
 
 	return nil

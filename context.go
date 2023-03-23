@@ -2,15 +2,19 @@ package gospel
 
 import (
 	"fmt"
+	"net/http"
 )
 
 type ElementFunction func(c Context) Element
 
 type Context interface {
+	Request() *http.Request
+	Redirect(string)
+	RedirectedTo() string
 	Execute(ElementFunction) Element
 	Modified(variable ContextVarObj)
 	Element(string, ElementFunction) Element
-	GetVar(key string, index int) ContextVarObj
+	GetVar(key string) ContextVarObj
 	AddVar(variable ContextVarObj, key string)
 	AddFunc(callback ContextFuncObj, key string)
 	Interactive() bool
@@ -19,6 +23,8 @@ type Context interface {
 type DefaultContext struct {
 	key         string
 	interactive bool
+	redirectTo  string
+	request     *http.Request
 	root        *DefaultContext
 	Store       *Store
 }
@@ -29,10 +35,11 @@ type Store struct {
 	Funcs           map[string][]ContextFuncObj
 }
 
-func MakeDefaultContext() *DefaultContext {
+func MakeDefaultContext(request *http.Request) *DefaultContext {
 	dc := &DefaultContext{
-		key:   "root",
-		Store: MakeStore(),
+		key:     "root",
+		request: request,
+		Store:   MakeStore(),
 	}
 
 	dc.root = dc
@@ -88,6 +95,18 @@ func (s *Store) AddVar(key string, variable ContextVarObj) int {
 	return len(s.Variables[key])
 }
 
+func (d *DefaultContext) Redirect(path string) {
+	d.redirectTo = path
+}
+
+func (d *DefaultContext) RedirectedTo() string {
+	return d.redirectTo
+}
+
+func (d *DefaultContext) Request() *http.Request {
+	return d.request
+}
+
 func (d *DefaultContext) Interactive() bool {
 	return d.root.interactive
 }
@@ -117,9 +136,9 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	return elementFunction(d)
 }
 
-func (d *DefaultContext) GetVar(key string, index int) ContextVarObj {
-	Log.Info("Variable '%s.%d' requested from '%s'...", key, index, d.key)
-	return d.root.Store.GetVar(key, index)
+func (d *DefaultContext) GetVar(key string) ContextVarObj {
+	Log.Info("Variable '%s' requested from '%s'...", key, d.key)
+	return d.root.Store.GetVar(key, 1)
 }
 
 func (d *DefaultContext) AddFunc(callback ContextFuncObj, key string) {
@@ -142,4 +161,21 @@ func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
 	i := d.root.Store.AddVar(key, variable)
 	Log.Info("Adding state %s.%d", key, i)
 	variable.SetId(fmt.Sprintf("%s.%d", key, i))
+}
+
+func SetVar(c Context, v any, key string) {
+	variable := MakeVarObj(c, v)
+	c.AddVar(variable, key)
+}
+
+func UseVar[T any](c Context, key string) T {
+
+	variable := c.GetVar(key)
+
+	if variable != nil {
+		if vt, ok := variable.GetRaw().(T); ok {
+			return vt
+		}
+	}
+	return *new(T)
 }

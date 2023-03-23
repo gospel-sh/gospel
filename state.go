@@ -22,6 +22,14 @@ type VarObj[T any] struct {
 	id      string
 }
 
+func MakeVarObj[T any](context Context, value T) *VarObj[T] {
+	return &VarObj[T]{
+		context: context,
+		value:   value,
+		id:      "",
+	}
+}
+
 func (s *VarObj[T]) SetId(id string) {
 	s.id = id
 }
@@ -108,4 +116,16 @@ func Var[T any](c Context, value T) *VarObj[T] {
 	sv := &VarObj[T]{c, value, ""}
 	c.AddVar(sv, "")
 	return sv
+}
+
+func GetVar[T any](c Context, key string) *VarObj[T] {
+	sv := c.GetVar(key)
+
+	if sv != nil {
+		if svt, ok := sv.GetRaw().(T); ok {
+			return &VarObj[T]{c, svt, key}
+		}
+	}
+
+	return nil
 }
