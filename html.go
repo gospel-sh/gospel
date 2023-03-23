@@ -326,6 +326,8 @@ var Name = Attrib("name")
 var Value = Attrib("value")
 var Style = Attrib("style")
 var Method = Attrib("method")
+var Content = Attrib("content")
+var Alt = Attrib("alt")
 
 // HTML Tags
 // https://www.w3.org/TR/2011/WD-html-markup-20110113/syntax.html
@@ -447,3 +449,6 @@ var Param = VoidTag("param")
 var Source = VoidTag("source")
 var Track = VoidTag("track")
 var Wbr = VoidTag("wbr")
+
+// Special tags
+var Doctype = func(doctype string) *Literal { return &Literal{fmt.Sprintf("<!doctype %s>", doctype)} }

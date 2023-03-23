@@ -2,6 +2,7 @@ package gospel
 
 import (
 	"net/http"
+	"strings"
 )
 
 type Router struct {
@@ -29,6 +30,10 @@ func (r *Router) SetContext(c Context) {
 	c.AddVar(r.variable, "router")
 }
 
+func (r *Router) Context() Context {
+	return r.context
+}
+
 func (r *Router) Route() *Route {
 	return &Route{}
 }
@@ -36,6 +41,15 @@ func (r *Router) Route() *Route {
 func (r *Router) RedirectTo(url string) {
 	// we notify the controller that the route was modified
 	r.context.Modified(r.variable)
+}
+
+func (r *Router) Match(route string, elementFunc ElementFunction) Element {
+
+	if strings.HasPrefix(r.request.URL.Path, route) {
+		return elementFunc(r.context)
+	}
+
+	return nil
 }
 
 func UseRouter(c Context) *Router {

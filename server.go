@@ -41,7 +41,7 @@ func MakeServer(app *App) *Server {
 		app:        app,
 		fileServer: http.FileServer(http.FS(&PrefixFS{fs: &MultiFS{append([]fs.FS{JS}, app.StaticFiles...)}, prefix: app.StaticPrefix})),
 		server: &http.Server{
-			Addr: ":8000",
+			Addr: ":8001",
 		},
 	}
 }
