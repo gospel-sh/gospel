@@ -113,15 +113,19 @@ func (l *Literal) RenderElement(c Context) string {
 	return l.Value
 }
 
-func children(args ...any) (children []Element) {
+func children(args ...any) (chldr []Element) {
 
-	children = make([]Element, 0, len(args))
+	chldr = make([]Element, 0, len(args))
 
 	for _, arg := range args {
-		if elem, ok := arg.(Element); ok {
-			children = append(children, elem)
+		if elementList, ok := arg.([]Element); ok {
+			chldr = append(chldr, elementList...)
+		} else if anyList, ok := arg.([]any); ok {
+			chldr = append(chldr, children(anyList...)...)
+		} else if elem, ok := arg.(Element); ok {
+			chldr = append(chldr, elem)
 		} else if str, ok := arg.(string); ok {
-			children = append(children, &Literal{str})
+			chldr = append(chldr, &Literal{str})
 		}
 	}
 
