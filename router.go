@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
-	"strings"
 )
 
 type Router struct {
-	context  Context
-	variable *VarObj[*Router]
+	context      Context
+	currentRoute *MatchedRoute
+	variable     *VarObj[*Router]
 }
 
 func MakeRouter(context Context) *Router {
@@ -40,13 +40,6 @@ func (r *Router) Context() Context {
 func (r *Router) RedirectTo(url string) {
 	// we notify the controller that the route was modified
 	r.context.Modified(r.variable)
-}
-
-func (r *Router) Matches(route string) bool {
-	if strings.HasPrefix(r.context.Request().URL.Path, route) {
-		return true
-	}
-	return false
 }
 
 func Route(route string, elementFunc any) *RouteConfig {
@@ -86,7 +79,34 @@ func callElementFunc(context Context, handler any, params []string) Element {
 
 }
 
-func (r *Router) Match(routeConfigs ...*RouteConfig) Element {
+type MatchedRoute struct {
+	Fragments []string
+	Config    *RouteConfig
+}
+
+func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
+	// we ensure the full routing context is always present when the function
+	// is being called, as the context might call the element function
+	// repeatedly e.g. due to variable changes...
+	return func(c Context) Element {
+		// we replace the route with the matched one
+		previousRoute := r.ReplaceCurrentRoute(matchedRoute)
+		// we call the element function with the given context
+		element := callElementFunc(c, matchedRoute.Config.ElementFunc, matchedRoute.Fragments)
+		// we restore the previous route
+		r.ReplaceCurrentRoute(previousRoute)
+
+		return element
+	}
+}
+
+func (r *Router) ReplaceCurrentRoute(matchedRoute *MatchedRoute) *MatchedRoute {
+	currentRoute := r.currentRoute
+	r.currentRoute = matchedRoute
+	return currentRoute
+}
+
+func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 
 	path := r.context.Request().URL.Path
 
@@ -101,7 +121,13 @@ func (r *Router) Match(routeConfigs ...*RouteConfig) Element {
 
 		if len(match) > 0 {
 			Log.Info("%v", match)
-			return r.context.Element(fmt.Sprintf("route.%d", i), func(c Context) Element { return callElementFunc(c, routeConfig.ElementFunc, match[1:]) })
+
+			matchedRoute := &MatchedRoute{
+				Config:    routeConfig,
+				Fragments: match[1:],
+			}
+
+			return c.Element(fmt.Sprintf("route.%d", i), routeElementFunc(r, matchedRoute))
 		}
 	}
 

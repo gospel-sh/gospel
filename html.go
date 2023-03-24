@@ -132,13 +132,17 @@ func children(args ...any) (chldr []Element) {
 	return
 }
 
-func attributes(args ...any) (attributes []Attribute) {
+func attributes(args ...any) (attribs []Attribute) {
 
-	attributes = make([]Attribute, 0, len(args))
+	attribs = make([]Attribute, 0, len(args))
 
 	for _, arg := range args {
 		if elem, ok := arg.(Attribute); ok {
-			attributes = append(attributes, elem)
+			attribs = append(attribs, elem)
+		} else if attribList, ok := arg.([]Attribute); ok {
+			attribs = append(attribs, attribList...)
+		} else if anyList, ok := arg.([]any); ok {
+			attribs = append(attribs, attributes(anyList...)...)
 		}
 	}
 

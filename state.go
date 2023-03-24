@@ -47,6 +47,7 @@ func (s *VarObj[T]) GetRaw() any {
 }
 
 func (s *VarObj[T]) Set(value any) {
+	Log.Info("Setting '%s'", s.id)
 	if tv, ok := value.(T); ok {
 		s.value = tv
 	}
@@ -128,4 +129,30 @@ func GetVar[T any](c Context, key string) *VarObj[T] {
 	}
 
 	return nil
+}
+
+func SetVar(c Context, key string, v any) ContextVarObj {
+	variable := InitVar(c, key, v)
+	// we explicitly set the variable
+	variable.Set(v)
+	return variable
+}
+
+func InitVar(c Context, key string, v any) ContextVarObj {
+	variable := MakeVarObj(c, v)
+	c.AddVar(variable, key)
+	Log.Info("v: %v", variable.GetRaw())
+	return variable
+}
+
+func UseVar[T any](c Context, key string) T {
+
+	variable := c.GetVar(key)
+
+	if variable != nil {
+		if vt, ok := variable.GetRaw().(T); ok {
+			return vt
+		}
+	}
+	return *new(T)
 }

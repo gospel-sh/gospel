@@ -9,7 +9,7 @@ type ElementFunction func(c Context) Element
 
 type Context interface {
 	Request() *http.Request
-	Redirect(string)
+	Redirect(string) Element
 	RedirectedTo() string
 	Execute(ElementFunction) Element
 	Modified(variable ContextVarObj)
@@ -83,6 +83,7 @@ func (s *Store) AddVar(key string, variable ContextVarObj) int {
 
 	if vars, ok := s.Variables[key]; ok {
 		if i < len(vars) {
+			Log.Info("Found previous value: %v", vars[i].GetRaw())
 			// this variable exists already
 			variable.Set(vars[i].GetRaw())
 			// we replace the variable...
@@ -95,16 +96,17 @@ func (s *Store) AddVar(key string, variable ContextVarObj) int {
 	return len(s.Variables[key])
 }
 
-func (d *DefaultContext) Redirect(path string) {
-	d.redirectTo = path
+func (d *DefaultContext) Redirect(path string) Element {
+	d.root.redirectTo = path
+	return nil
 }
 
 func (d *DefaultContext) RedirectedTo() string {
-	return d.redirectTo
+	return d.root.redirectTo
 }
 
 func (d *DefaultContext) Request() *http.Request {
-	return d.request
+	return d.root.request
 }
 
 func (d *DefaultContext) Interactive() bool {
@@ -113,7 +115,7 @@ func (d *DefaultContext) Interactive() bool {
 
 func (d *DefaultContext) Element(key string, elementFunction ElementFunction) Element {
 
-	Log.Info("Memorizing key %s", key)
+	Log.Info("Memorizing key %s.%s", d.key, key)
 
 	c := &DefaultContext{
 		key:  fmt.Sprintf("%s.%s", d.key, key),
@@ -131,6 +133,7 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	// interactive tree generation (i.e. call functions to modify variables)
 	elementFunction(d)
 	d.Store.Flush()
+	Log.Info("Flushing...")
 	// non-interactive tree generation (i.e. do not modify variables)
 	d.root.interactive = false
 	return elementFunction(d)
@@ -161,21 +164,4 @@ func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
 	i := d.root.Store.AddVar(key, variable)
 	Log.Info("Adding state %s.%d", key, i)
 	variable.SetId(fmt.Sprintf("%s.%d", key, i))
-}
-
-func SetVar(c Context, v any, key string) {
-	variable := MakeVarObj(c, v)
-	c.AddVar(variable, key)
-}
-
-func UseVar[T any](c Context, key string) T {
-
-	variable := c.GetVar(key)
-
-	if variable != nil {
-		if vt, ok := variable.GetRaw().(T); ok {
-			return vt
-		}
-	}
-	return *new(T)
 }
