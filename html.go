@@ -1,6 +1,7 @@
 package gospel
 
 import (
+	"encoding/hex"
 	"fmt"
 )
 
@@ -24,6 +25,23 @@ type HTMLAttribute struct {
 	Hidden bool
 	Value  any
 	Args   []any
+}
+
+func Unhex(value string) []byte {
+	if v, err := hex.DecodeString(value); err != nil {
+		Log.Error("Cannot parse hex value: %v", err)
+		return nil
+	} else {
+		return v
+	}
+}
+
+func Hex(value []byte) string {
+	return hex.EncodeToString(value)
+}
+
+func Fmt(text string, args ...any) string {
+	return fmt.Sprintf(text, args...)
 }
 
 func Attrib(tag string) func(value any, args ...any) *HTMLAttribute {
