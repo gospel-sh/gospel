@@ -1,33 +1,21 @@
 package gospel
 
-func If(condition any, args ...any) []any {
-
-	var c bool
-
-	if cv, ok := condition.(*VarObj[bool]); ok {
-		c = cv.Get()
-	} else if c, ok = condition.(bool); !ok {
-		// to do: raise a warning
-		return nil
-	}
-	if c {
-		return args
-	}
-	return nil
-}
-
 type VarObj[T any] struct {
 	context Context
 	value   T
 	id      string
+	copy    bool
 }
 
-func MakeVarObj[T any](context Context, value T) *VarObj[T] {
+func MakeVarObj[T any](context Context) *VarObj[T] {
 	return &VarObj[T]{
 		context: context,
-		value:   value,
 		id:      "",
 	}
+}
+
+func (s *VarObj[T]) SetCopy(copy bool) {
+	s.copy = copy
 }
 
 func (s *VarObj[T]) SetId(id string) {
@@ -39,23 +27,31 @@ func (s *VarObj[T]) Id() string {
 }
 
 func (s *VarObj[T]) Get() T {
+	if s.copy {
+		if vt, ok := s.context.GetById(s.id).GetRaw().(T); ok {
+			return vt
+		}
+		return *new(T)
+	}
 	return s.value
 }
 
 func (s *VarObj[T]) GetRaw() any {
-	return s.value
+	return s.Get()
 }
 
 func (s *VarObj[T]) Set(value any) {
-	Log.Info("Setting '%s'", s.id)
-	if tv, ok := value.(T); ok {
-		s.value = tv
+	if s.copy {
+		s.context.SetById(s.id, value)
+	} else if sv, ok := value.(T); ok {
+		s.value = sv
 	}
 }
 
 type ContextVarObj interface {
 	SetId(string)
 	Id() string
+	SetCopy(bool)
 	Set(any)
 	GetRaw() any
 }
@@ -114,38 +110,23 @@ func Func(c Context, value func()) *FuncObj {
 }
 
 func Var[T any](c Context, value T) *VarObj[T] {
-	sv := &VarObj[T]{c, value, ""}
-	c.AddVar(sv, "")
+	sv := MakeVarObj[T](c)
+	sv.Set(value)
+	c.AddVar(sv, "", false)
 	return sv
 }
 
-func GetVar[T any](c Context, key string) *VarObj[T] {
-	sv := c.GetVar(key)
+func GlobalVar[T any](c Context, key string, v T) *VarObj[T] {
 
-	if sv != nil {
-		if svt, ok := sv.GetRaw().(T); ok {
-			return &VarObj[T]{c, svt, key}
-		}
-	}
-
-	return nil
-}
-
-func SetVar(c Context, key string, v any) ContextVarObj {
-	variable := InitVar(c, key, v)
-	// we explicitly set the variable
+	variable := MakeVarObj[T](c)
 	variable.Set(v)
+
+	c.AddVar(variable, key, true)
+
 	return variable
 }
 
-func InitVar(c Context, key string, v any) ContextVarObj {
-	variable := MakeVarObj(c, v)
-	c.AddVar(variable, key)
-	Log.Info("v: %v", variable.GetRaw())
-	return variable
-}
-
-func UseVar[T any](c Context, key string) T {
+func UseGlobal[T any](c Context, key string) T {
 
 	variable := c.GetVar(key)
 

@@ -9,13 +9,13 @@ type ElementFunction func(c Context) Element
 
 type Context interface {
 	Request() *http.Request
-	Redirect(string) Element
-	RedirectedTo() string
 	Execute(ElementFunction) Element
 	Modified(variable ContextVarObj)
 	Element(string, ElementFunction) Element
 	GetVar(key string) ContextVarObj
-	AddVar(variable ContextVarObj, key string)
+	SetById(id string, value any)
+	GetById(id string) ContextVarObj
+	AddVar(variable ContextVarObj, key string, global bool)
 	AddFunc(callback ContextFuncObj, key string)
 	Interactive() bool
 }
@@ -23,7 +23,6 @@ type Context interface {
 type DefaultContext struct {
 	key         string
 	interactive bool
-	redirectTo  string
 	request     *http.Request
 	root        *DefaultContext
 	Store       *Store
@@ -31,7 +30,7 @@ type DefaultContext struct {
 
 type Store struct {
 	VariableIndices map[string]int
-	Variables       map[string][]ContextVarObj
+	Variables       map[string]ContextVarObj
 	Funcs           map[string][]ContextFuncObj
 }
 
@@ -49,10 +48,21 @@ func MakeDefaultContext(request *http.Request) *DefaultContext {
 
 func MakeStore() *Store {
 	return &Store{
-		Variables:       make(map[string][]ContextVarObj),
+		Variables:       make(map[string]ContextVarObj),
 		VariableIndices: make(map[string]int),
 		Funcs:           make(map[string][]ContextFuncObj),
 	}
+}
+
+func (s *Store) SetById(id string, value any) {
+	if variable, ok := s.Variables[id]; ok {
+		variable.Set(value)
+	}
+}
+
+func (s *Store) GetById(id string) ContextVarObj {
+	v, _ := s.Variables[id]
+	return v
 }
 
 func (s *Store) Flush() {
@@ -60,11 +70,9 @@ func (s *Store) Flush() {
 	s.VariableIndices = make(map[string]int)
 }
 
-func (s *Store) GetVar(key string, index int) ContextVarObj {
-	if vars, ok := s.Variables[key]; ok {
-		if index > 0 && len(vars) >= index {
-			return vars[index-1]
-		}
+func (s *Store) GetVar(key string) ContextVarObj {
+	if variable, ok := s.Variables[key]; ok {
+		return variable
 	}
 	return nil
 }
@@ -74,39 +82,43 @@ func (s *Store) AddFunc(key string, callback ContextFuncObj) int {
 	return len(s.Funcs[key])
 }
 
-func (s *Store) AddVar(key string, variable ContextVarObj) int {
+func (s *Store) AddVar(variable ContextVarObj, key string, global bool) (string, bool) {
 
-	// by default, we'll use the 0 index
-	i, _ := s.VariableIndices[key]
+	var i int
+	var fullKey string
 
-	s.VariableIndices[key] = i + 1
-
-	if vars, ok := s.Variables[key]; ok {
-		if i < len(vars) {
-			Log.Info("Found previous value: %v", vars[i].GetRaw())
-			// this variable exists already
-			variable.Set(vars[i].GetRaw())
-			// we replace the variable...
-			vars[i] = variable
-			return i + 1
-		}
+	// for global variables, the index will always be 0
+	if !global {
+		// by default, we'll use the 0 index
+		i, _ = s.VariableIndices[key]
+		s.VariableIndices[key] = i + 1
+		fullKey = fmt.Sprintf("%s.%d", key, i)
+	} else {
+		fullKey = key
 	}
 
-	s.Variables[key] = append(s.Variables[key], variable)
-	return len(s.Variables[key])
-}
+	if v, ok := s.Variables[fullKey]; ok {
+		Log.Info("Found previous value: %v", v.GetRaw())
+		// we replace the variable...
+		return fullKey, true
+	}
 
-func (d *DefaultContext) Redirect(path string) Element {
-	d.root.redirectTo = path
-	return nil
-}
+	variable.SetCopy(false)
+	s.Variables[fullKey] = variable
 
-func (d *DefaultContext) RedirectedTo() string {
-	return d.root.redirectTo
+	return fullKey, false
 }
 
 func (d *DefaultContext) Request() *http.Request {
 	return d.root.request
+}
+
+func (d *DefaultContext) SetById(id string, variable any) {
+	d.root.Store.SetById(id, variable)
+}
+
+func (d *DefaultContext) GetById(id string) ContextVarObj {
+	return d.root.Store.GetById(id)
 }
 
 func (d *DefaultContext) Interactive() bool {
@@ -132,7 +144,7 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	d.root.interactive = true
 	// interactive tree generation (i.e. call functions to modify variables)
 	elementFunction(d)
-	d.Store.Flush()
+	d.root.Store.Flush()
 	Log.Info("Flushing...")
 	// non-interactive tree generation (i.e. do not modify variables)
 	d.root.interactive = false
@@ -141,13 +153,13 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 
 func (d *DefaultContext) GetVar(key string) ContextVarObj {
 	Log.Info("Variable '%s' requested from '%s'...", key, d.key)
-	return d.root.Store.GetVar(key, 1)
+	return d.root.Store.GetVar(key)
 }
 
-func (d *DefaultContext) AddFunc(callback ContextFuncObj, key string) {
-	i := d.root.Store.AddFunc(d.key, callback)
-	Log.Info("Adding callback %s.%d", d.key, i)
-	callback.SetId(fmt.Sprintf("%s.%d", d.key, i))
+func (d *DefaultContext) AddFunc(function ContextFuncObj, key string) {
+	i := d.root.Store.AddFunc(d.key, function)
+	Log.Info("Adding function %s.%d", d.key, i)
+	function.SetId(fmt.Sprintf("%s.%d", d.key, i))
 
 }
 
@@ -155,13 +167,14 @@ func (d *DefaultContext) Modified(variable ContextVarObj) {
 	Log.Info("Variable '%s' modified from '%s'", variable.Id(), d.key)
 }
 
-func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
+func (d *DefaultContext) AddVar(variable ContextVarObj, key string, global bool) {
 
 	if key == "" {
 		key = d.key
 	}
 
-	i := d.root.Store.AddVar(key, variable)
-	Log.Info("Adding state %s.%d", key, i)
-	variable.SetId(fmt.Sprintf("%s.%d", key, i))
+	id, exists := d.root.Store.AddVar(variable, key, global)
+
+	variable.SetId(id)
+	variable.SetCopy(exists)
 }

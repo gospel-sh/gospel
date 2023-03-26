@@ -56,11 +56,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := MakeDefaultContext(r)
 
 	// we set up the router (it adds itself to the context)...
-	MakeRouter(ctx)
+	router := MakeRouter(ctx)
 
 	elem := ctx.Execute(s.app.Root)
 
-	if redirectedTo := ctx.RedirectedTo(); redirectedTo != "" && redirectedTo != r.URL.Path {
+	if redirectedTo := router.RedirectedTo(); redirectedTo != "" && redirectedTo != r.URL.Path {
 		http.Redirect(w, r, redirectedTo, 302)
 		return
 	}

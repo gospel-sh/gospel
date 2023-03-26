@@ -10,7 +10,8 @@ import (
 type Router struct {
 	context      Context
 	currentRoute *MatchedRoute
-	variable     *VarObj[*Router]
+	variable     ContextVarObj
+	redirectedTo string
 }
 
 func MakeRouter(context Context) *Router {
@@ -18,8 +19,7 @@ func MakeRouter(context Context) *Router {
 		context: context,
 	}
 
-	router.variable = &VarObj[*Router]{context, router, ""}
-	context.AddVar(router.variable, "router")
+	router.variable = GlobalVar(context, "router", router)
 
 	return router
 }
@@ -38,8 +38,11 @@ func (r *Router) Context() Context {
 }
 
 func (r *Router) RedirectTo(url string) {
-	// we notify the controller that the route was modified
-	r.context.Modified(r.variable)
+	r.redirectedTo = url
+}
+
+func (r *Router) RedirectedTo() string {
+	return r.redirectedTo
 }
 
 func Route(route string, elementFunc any) *RouteConfig {
@@ -139,7 +142,7 @@ func UseRouter(c Context) *Router {
 	// check if router is defined in context already
 	// if so, return it
 
-	routerVar := GetVar[*Router](c, "router")
+	routerVar := GlobalVar[*Router](c, "router", nil)
 
 	if routerVar != nil {
 		return routerVar.Get()
