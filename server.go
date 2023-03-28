@@ -78,5 +78,5 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Stop() {
-
+	// to do: implement stop
 }
