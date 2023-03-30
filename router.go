@@ -8,10 +8,10 @@ import (
 )
 
 type Router struct {
-	context      Context
-	currentRoute *MatchedRoute
-	variable     ContextVarObj
-	redirectedTo string
+	context       Context
+	matchedRoutes []*MatchedRoute
+	variable      ContextVarObj
+	redirectedTo  string
 }
 
 func MakeRouter(context Context) *Router {
@@ -83,6 +83,7 @@ func callElementFunc(context Context, handler any, params []string) Element {
 }
 
 type MatchedRoute struct {
+	Path      string
 	Fragments []string
 	Config    *RouteConfig
 }
@@ -93,25 +94,63 @@ func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
 	// repeatedly e.g. due to variable changes...
 	return func(c Context) Element {
 		// we replace the route with the matched one
-		previousRoute := r.ReplaceCurrentRoute(matchedRoute)
+		r.PushRoute(matchedRoute)
 		// we call the element function with the given context
-		element := callElementFunc(c, matchedRoute.Config.ElementFunc, matchedRoute.Fragments)
+
+		element, ok := matchedRoute.Config.ElementFunc.(Element)
+
+		if !ok {
+			element = callElementFunc(c, matchedRoute.Config.ElementFunc, matchedRoute.Fragments)
+		}
+
 		// we restore the previous route
-		r.ReplaceCurrentRoute(previousRoute)
+		r.PopRoute()
 
 		return element
 	}
 }
 
-func (r *Router) ReplaceCurrentRoute(matchedRoute *MatchedRoute) *MatchedRoute {
-	currentRoute := r.currentRoute
-	r.currentRoute = matchedRoute
-	return currentRoute
+func (r *Router) CurrentRoute() *MatchedRoute {
+
+	if len(r.matchedRoutes) == 0 {
+		return nil
+	}
+
+	return r.matchedRoutes[len(r.matchedRoutes)-1]
+}
+
+func (r *Router) PushRoute(matchedRoute *MatchedRoute) {
+	r.matchedRoutes = append(r.matchedRoutes, matchedRoute)
+}
+
+func (r *Router) RedirectUp() {
+	if len(r.matchedRoutes) < 2 {
+		return
+	}
+
+	r.RedirectTo(r.matchedRoutes[len(r.matchedRoutes)-2].Path)
+}
+
+func (r *Router) PopRoute() {
+
+	if len(r.matchedRoutes) == 0 {
+		return
+	}
+
+	r.matchedRoutes = r.matchedRoutes[:len(r.matchedRoutes)-1]
 }
 
 func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 
 	path := r.context.Request().URL.Path
+
+	var previousPath string
+
+	if r.CurrentRoute() != nil {
+		// we remove the prefix that was already matched
+		previousPath = path[:len(r.CurrentRoute().Path)]
+		path = path[len(r.CurrentRoute().Path):]
+	}
 
 	for i, routeConfig := range routeConfigs {
 		re, err := regexp.Compile(routeConfig.Route)
@@ -127,6 +166,7 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 
 			matchedRoute := &MatchedRoute{
 				Config:    routeConfig,
+				Path:      previousPath + match[0],
 				Fragments: match[1:],
 			}
 

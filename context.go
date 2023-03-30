@@ -11,6 +11,7 @@ type Context interface {
 	Request() *http.Request
 	Execute(ElementFunction) Element
 	Modified(variable ContextVarObj)
+	ElementFunction(string, ElementFunction) ElementFunction
 	Element(string, ElementFunction) Element
 	GetVar(key string) ContextVarObj
 	SetById(id string, value any)
@@ -123,6 +124,14 @@ func (d *DefaultContext) GetById(id string) ContextVarObj {
 
 func (d *DefaultContext) Interactive() bool {
 	return d.root.interactive
+}
+
+func (d *DefaultContext) ElementFunction(key string, elementFunction ElementFunction) ElementFunction {
+
+	return func(c Context) Element {
+		return c.Element(key, elementFunction)
+	}
+
 }
 
 func (d *DefaultContext) Element(key string, elementFunction ElementFunction) Element {
