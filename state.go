@@ -1,10 +1,11 @@
 package gospel
 
 type VarObj[T any] struct {
-	context Context
-	value   T
-	id      string
-	copy    bool
+	context    Context
+	value      T
+	id         string
+	copy       bool
+	persistent bool
 }
 
 func MakeVarObj[T any](context Context) *VarObj[T] {
@@ -40,6 +41,14 @@ func (s *VarObj[T]) GetRaw() any {
 	return s.Get()
 }
 
+func (s *VarObj[T]) Persistent() bool {
+	return s.persistent
+}
+
+func (s *VarObj[T]) SetPersistent(value bool) {
+	s.persistent = value
+}
+
 func (s *VarObj[T]) Set(value any) {
 	if s.copy {
 		s.context.SetById(s.id, value)
@@ -49,6 +58,8 @@ func (s *VarObj[T]) Set(value any) {
 }
 
 type ContextVarObj interface {
+	SetPersistent(bool)
+	Persistent() bool
 	SetId(string)
 	Id() string
 	SetCopy(bool)
@@ -107,6 +118,14 @@ func Func(c Context, value func()) *FuncObj {
 	cf := &FuncObj{c, value, ""}
 	c.AddFunc(cf, "")
 	return cf
+}
+
+func PersistentVar[T any](c Context, value T) *VarObj[T] {
+	sv := MakeVarObj[T](c)
+	sv.SetPersistent(true)
+	sv.Set(value)
+	c.AddVar(sv, "", false)
+	return sv
 }
 
 func Var[T any](c Context, value T) *VarObj[T] {

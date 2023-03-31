@@ -354,6 +354,7 @@ var Style = Attrib("style")
 var Method = Attrib("method")
 var Content = Attrib("content")
 var Alt = Attrib("alt")
+var Placeholder = Attrib("placeholder")
 
 // HTML Tags
 // https://www.w3.org/TR/2011/WD-html-markup-20110113/syntax.html

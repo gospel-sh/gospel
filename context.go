@@ -22,11 +22,17 @@ type Context interface {
 }
 
 type DefaultContext struct {
-	key         string
-	interactive bool
-	request     *http.Request
-	root        *DefaultContext
-	Store       *Store
+	key             string
+	interactive     bool
+	request         *http.Request
+	root            *DefaultContext
+	Store           *Store
+	PersistentStore PersistentStore
+}
+
+type PersistentStore interface {
+	Get(id string, key string, value interface{}) error
+	Set(id string, key string, value interface{}) error
 }
 
 type Store struct {
@@ -100,7 +106,6 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) (string,
 
 	if v, ok := s.Variables[fullKey]; ok {
 		Log.Info("Found previous value: %v", v.GetRaw())
-		// we replace the variable...
 		return fullKey, true
 	}
 
