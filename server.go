@@ -60,7 +60,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	elem := ctx.Execute(s.app.Root)
 
-	if redirectedTo := router.RedirectedTo(); redirectedTo != "" && redirectedTo != r.URL.Path {
+	if redirectedTo := router.RedirectedTo(); redirectedTo != "" && (redirectedTo != r.URL.Path || r.Method != http.MethodGet) {
 		http.Redirect(w, r, redirectedTo, 302)
 		return
 	}

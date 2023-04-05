@@ -131,6 +131,13 @@ func (r *Router) RedirectUp() {
 	r.RedirectTo(r.matchedRoutes[len(r.matchedRoutes)-2].Path)
 }
 
+func (r *Router) CurrentPath() string {
+	if len(r.matchedRoutes) == 0 {
+		return ""
+	}
+	return r.matchedRoutes[len(r.matchedRoutes)-1].Path
+}
+
 func (r *Router) PopRoute() {
 
 	if len(r.matchedRoutes) == 0 {
