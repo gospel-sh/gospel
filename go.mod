@@ -1,3 +1,3 @@
-module github.com/kiprotect/gospel
+module github.com/gospel-dev/gospel
 
 go 1.20
