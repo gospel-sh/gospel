@@ -3,6 +3,7 @@ package gospel
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 )
@@ -12,6 +13,11 @@ type Router struct {
 	matchedRoutes []*MatchedRoute
 	variable      ContextVarObj
 	redirectedTo  string
+}
+
+func PathWithQuery(path string, query map[string][]string) string {
+	values := url.Values(query)
+	return fmt.Sprintf("%s?%s", path, values.Encode())
 }
 
 func MakeRouter(context Context) *Router {
@@ -37,8 +43,12 @@ func (r *Router) Context() Context {
 	return r.context
 }
 
-func (r *Router) RedirectTo(url string) {
-	r.redirectedTo = url
+func (r *Router) RedirectTo(path string) {
+	r.redirectedTo = path
+}
+
+func (r *Router) Query() url.Values {
+	return r.context.Request().URL.Query()
 }
 
 func (r *Router) RedirectedTo() string {
