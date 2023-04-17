@@ -44,6 +44,14 @@ func Fmt(text string, args ...any) string {
 	return fmt.Sprintf(text, args...)
 }
 
+func BooleanAttrib(tag string) func() *HTMLAttribute {
+	return func() *HTMLAttribute {
+		return &HTMLAttribute{
+			Name: tag,
+		}
+	}
+}
+
 func Attrib(tag string) func(value any, args ...any) *HTMLAttribute {
 	return func(value any, args ...any) *HTMLAttribute {
 		return &HTMLAttribute{
@@ -168,6 +176,76 @@ func mapHTMLAttributes(attribs []Attribute, mapper func(*HTMLAttribute) []Attrib
 
 }
 
+func Selectable() HTMLElementDecorator {
+
+	return func(element *HTMLElement) {
+
+		var selectedValue ContextVarObj
+
+		mapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+
+			if htmlAttrib.Name == "value" {
+
+				var ok bool
+
+				selectedValue, ok = htmlAttrib.Value.(ContextVarObj)
+
+				if ok {
+					return []Attribute{&HTMLAttribute{
+						Name:  "name",
+						Value: selectedValue.Id(),
+					}}
+				}
+
+			}
+
+			return []Attribute{htmlAttrib}
+
+		}
+
+		element.Attributes = mapHTMLAttributes(element.Attributes, mapper)
+
+		if selectedValue == nil {
+			return
+		}
+
+		// we have found a value, we map it to the children
+
+		for _, child := range element.Children {
+
+			htmlChild, ok := child.(*HTMLElement)
+
+			if !ok {
+				continue
+			}
+
+			if htmlChild.Tag != "option" {
+				continue
+			}
+
+			var value any
+
+			for _, attrib := range htmlChild.Attributes {
+
+				htmlAttrib, ok := attrib.(*HTMLAttribute)
+
+				if !ok {
+					continue
+				}
+
+				if htmlAttrib.Name == "name" {
+					value = htmlAttrib.Value
+					break
+				}
+			}
+
+			if value == selectedValue.GetRaw() {
+				htmlChild.Attributes = append(htmlChild.Attributes, BooleanAttrib("selected")())
+			}
+		}
+	}
+}
+
 func Assignable() HTMLElementDecorator {
 	return func(element *HTMLElement) {
 
@@ -175,9 +253,10 @@ func Assignable() HTMLElementDecorator {
 
 			if htmlAttrib.Name == "value" {
 				v, ok := htmlAttrib.Value.(ContextVarObj)
+
 				if !ok {
-					Log.Warning("uh oh: not a HTML attribute")
-					return nil
+					// this is a regular attribute
+					return []Attribute{htmlAttrib}
 				}
 
 				htmlAttrib.Name = "gospel-value"
@@ -256,9 +335,7 @@ func Submittable() HTMLElementDecorator {
 				c := f.Context()
 
 				router := UseRouter(c)
-
 				req := router.Request()
-				Log.Info("%s:%s", req.URL.Path, req.Method)
 
 				if req.Method == "POST" && c.Interactive() {
 
@@ -267,16 +344,23 @@ func Submittable() HTMLElementDecorator {
 						return nil
 					}
 
-					// we update variables based on form content
-					assignVars(c, req.Form, element)
+					if req.Form.Get("_gospel_id") == f.Id() {
 
-					// we call the function
+						// we update variables based on form content
+						assignVars(c, req.Form, element)
 
-					f.Call()
+						// we call the function
 
-					Log.Info("%v", req.Form)
+						f.Call()
+
+						Log.Info("%v", req.Form)
+
+					}
 
 				}
+
+				// we append the ID of the form
+				element.Children = append(element.Children, Input(Type("hidden"), Name("_gospel_id"), Value(f.Id())))
 
 				return []Attribute{&HTMLAttribute{
 					Name:  "gospel-onSubmit",
@@ -450,13 +534,13 @@ var Optgroup = Tag("optgroup")
 var Option = Tag("option")
 var Output = Tag("output")
 var Progress = Tag("progress")
-var Select = Tag("select")
 var Textarea = Tag("textarea")
 var Details = Tag("details")
 var Dialog = Tag("dialog")
 var Summary = Tag("summary")
 var Slot = Tag("slot")
 var Template = Tag("template")
+var Select = Tag("select", Selectable())
 
 // HTML Void Tags
 
