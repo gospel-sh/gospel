@@ -80,6 +80,10 @@ func (a *HTMLAttribute) RenderAttribute(c Context) string {
 
 	}
 
+	if a.Value == nil {
+		return fmt.Sprintf("%s", a.Name)
+	}
+
 	return fmt.Sprintf("%s=\"%s%s\"", a.Name, a.Value, extraArgs)
 }
 
@@ -105,6 +109,11 @@ func (h *HTMLElement) RenderElement(c Context) string {
 		renderedChildren := ""
 
 		for _, child := range h.Children {
+
+			if child == nil {
+				continue
+			}
+
 			renderedChildren += child.RenderElement(c)
 		}
 
@@ -194,7 +203,13 @@ func Selectable() HTMLElementDecorator {
 					return []Attribute{&HTMLAttribute{
 						Name:  "name",
 						Value: selectedValue.Id(),
-					}}
+					},
+						&HTMLAttribute{
+							Name:   "gospel-value",
+							Hidden: true,
+							Value:  selectedValue,
+						},
+					}
 				}
 
 			}
@@ -233,7 +248,7 @@ func Selectable() HTMLElementDecorator {
 					continue
 				}
 
-				if htmlAttrib.Name == "name" {
+				if htmlAttrib.Name == "value" {
 					value = htmlAttrib.Value
 					break
 				}
