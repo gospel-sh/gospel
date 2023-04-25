@@ -14,9 +14,9 @@ type Context interface {
 	ElementFunction(string, ElementFunction) ElementFunction
 	Element(string, ElementFunction) Element
 	GetVar(key string) ContextVarObj
-	SetById(id string, value any)
+	SetById(id string, value any) error
 	GetById(id string) ContextVarObj
-	AddVar(variable ContextVarObj, key string)
+	AddVar(variable ContextVarObj, key string) error
 	AddFunc(callback ContextFuncObj, key string)
 	Interactive() bool
 }
@@ -30,8 +30,8 @@ type DefaultContext struct {
 }
 
 type PersistentStore interface {
-	Get(key string) (any, error)
-	Set(key string, value interface{}) error
+	Get(key string, value ContextVarObj) error
+	Set(key string, value ContextVarObj) error
 }
 
 type Store struct {
@@ -62,10 +62,11 @@ func MakeStore(persistentStore PersistentStore) *Store {
 	}
 }
 
-func (s *Store) SetById(id string, value any) {
+func (s *Store) SetById(id string, value any) error {
 	if variable, ok := s.Variables[id]; ok {
-		variable.Set(value)
+		return variable.Set(value)
 	}
+	return fmt.Errorf("not found")
 }
 
 func (s *Store) GetById(id string) ContextVarObj {
@@ -94,12 +95,12 @@ func (s *Store) Finalize() {
 	for key, variable := range s.Variables {
 		if variable.Persistent() {
 			Log.Info("Persisting variable %s: %v", key, variable.GetRaw())
-			s.persistentStore.Set(key, variable.GetRaw())
+			s.persistentStore.Set(key, variable)
 		}
 	}
 }
 
-func (s *Store) AddVar(variable ContextVarObj, key string, global bool) {
+func (s *Store) AddVar(variable ContextVarObj, key string, global bool) error {
 
 	var i int
 	var fullKey string
@@ -118,7 +119,7 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) {
 
 	if _, ok := s.Variables[fullKey]; ok {
 		variable.SetCopy(true)
-		return
+		return nil
 	}
 
 	// this variable is new
@@ -129,11 +130,10 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) {
 	// we check if the variable exists in the persistent store
 
 	if variable.Persistent() {
-		if v, err := s.persistentStore.Get(fullKey); err == nil {
-			Log.Info("Persistent value: %v", v)
-			variable.Set(v)
-		}
+		return s.persistentStore.Get(fullKey, variable)
 	}
+
+	return nil
 
 }
 
@@ -141,8 +141,8 @@ func (d *DefaultContext) Request() *http.Request {
 	return d.root.request
 }
 
-func (d *DefaultContext) SetById(id string, variable any) {
-	d.root.Store.SetById(id, variable)
+func (d *DefaultContext) SetById(id string, variable any) error {
+	return d.root.Store.SetById(id, variable)
 }
 
 func (d *DefaultContext) GetById(id string) ContextVarObj {
@@ -183,6 +183,7 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	d.root.Store.Flush()
 	Log.Info("Flushing...")
 	// non-interactive tree generation (i.e. do not modify variables)
+	// to do: only rerender parts that have changed during the interactive part...
 	d.root.interactive = false
 	return elementFunction(d)
 }
@@ -203,7 +204,7 @@ func (d *DefaultContext) Modified(variable ContextVarObj) {
 	Log.Info("Variable '%s' modified from '%s'", variable.Id(), d.key)
 }
 
-func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
+func (d *DefaultContext) AddVar(variable ContextVarObj, key string) error {
 
 	global := true
 
@@ -212,5 +213,5 @@ func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
 		key = d.key
 	}
 
-	d.root.Store.AddVar(variable, key, global)
+	return d.root.Store.AddVar(variable, key, global)
 }

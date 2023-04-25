@@ -1,5 +1,9 @@
 package gospel
 
+import (
+	"fmt"
+)
+
 type VarObj[T any] struct {
 	context     Context
 	value       T
@@ -64,13 +68,16 @@ func (s *VarObj[T]) Initialized() bool {
 	return s.initialized
 }
 
-func (s *VarObj[T]) Set(value any) {
+func (s *VarObj[T]) Set(value any) error {
 	if s.copy {
 		s.context.SetById(s.id, value)
 	} else if sv, ok := value.(T); ok {
 		s.value = sv
 		s.initialized = true
+	} else {
+		return fmt.Errorf("type error")
 	}
+	return nil
 }
 
 type ContextVarObj interface {
@@ -81,7 +88,7 @@ type ContextVarObj interface {
 	Id() string
 	SetCopy(bool)
 	IsCopy() bool
-	Set(any)
+	Set(any) error
 	GetRaw() any
 }
 

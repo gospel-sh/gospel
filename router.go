@@ -133,12 +133,17 @@ func (r *Router) PushRoute(matchedRoute *MatchedRoute) {
 	r.matchedRoutes = append(r.matchedRoutes, matchedRoute)
 }
 
-func (r *Router) RedirectUp() {
+func (r *Router) LastPath() string {
 	if len(r.matchedRoutes) < 2 {
-		return
+		return ""
 	}
+	return r.matchedRoutes[len(r.matchedRoutes)-2].Path
+}
 
-	r.RedirectTo(r.matchedRoutes[len(r.matchedRoutes)-2].Path)
+func (r *Router) RedirectUp() {
+	if lastPath := r.LastPath(); lastPath != "" {
+		r.RedirectTo(lastPath)
+	}
 }
 
 func (r *Router) CurrentPathWithQuery() string {
@@ -177,6 +182,11 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 	}
 
 	for i, routeConfig := range routeConfigs {
+
+		if routeConfig == nil {
+			continue
+		}
+
 		re, err := regexp.Compile(routeConfig.Route)
 		if err != nil {
 			Log.Warning("Cannot compile route '%s': %v", routeConfig.Route, err)

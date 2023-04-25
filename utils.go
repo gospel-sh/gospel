@@ -1,8 +1,8 @@
 package gospel
 
-func If(condition bool, value any) any {
+func If[T any](condition bool, value T) T {
 	if condition {
 		return value
 	}
-	return nil
+	return *new(T)
 }
