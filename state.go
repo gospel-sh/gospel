@@ -1,22 +1,29 @@
 package gospel
 
 type VarObj[T any] struct {
-	context    Context
-	value      T
-	id         string
-	copy       bool
-	persistent bool
+	context     Context
+	value       T
+	generator   func() T
+	id          string
+	copy        bool
+	persistent  bool
+	initialized bool
 }
 
-func MakeVarObj[T any](context Context) *VarObj[T] {
+func MakeVarObj[T any](context Context, generator func() T) *VarObj[T] {
 	return &VarObj[T]{
-		context: context,
-		id:      "",
+		context:   context,
+		generator: generator,
+		id:        "",
 	}
 }
 
 func (s *VarObj[T]) SetCopy(copy bool) {
 	s.copy = copy
+}
+
+func (s *VarObj[T]) IsCopy() bool {
+	return s.copy
 }
 
 func (s *VarObj[T]) SetId(id string) {
@@ -37,6 +44,10 @@ func (s *VarObj[T]) Get() T {
 	return s.value
 }
 
+func (s *VarObj[T]) Reset() {
+	s.Set(s.generator())
+}
+
 func (s *VarObj[T]) GetRaw() any {
 	return s.Get()
 }
@@ -49,20 +60,27 @@ func (s *VarObj[T]) SetPersistent(value bool) {
 	s.persistent = value
 }
 
+func (s *VarObj[T]) Initialized() bool {
+	return s.initialized
+}
+
 func (s *VarObj[T]) Set(value any) {
 	if s.copy {
 		s.context.SetById(s.id, value)
 	} else if sv, ok := value.(T); ok {
 		s.value = sv
+		s.initialized = true
 	}
 }
 
 type ContextVarObj interface {
 	SetPersistent(bool)
 	Persistent() bool
+	Initialized() bool
 	SetId(string)
 	Id() string
 	SetCopy(bool)
+	IsCopy() bool
 	Set(any)
 	GetRaw() any
 }
@@ -121,26 +139,51 @@ func Func(c Context, value func()) *FuncObj {
 }
 
 func PersistentVar[T any](c Context, value T) *VarObj[T] {
-	sv := MakeVarObj[T](c)
+	return persistentVar(c, value, "")
+}
+
+func PersistentGlobalVar[T any](c Context, key string, value T) *VarObj[T] {
+	return persistentVar(c, value, key)
+}
+
+func persistentVar[T any](c Context, value T, key string) *VarObj[T] {
+	sv := MakeVarObj[T](c, func() T { return value })
 	sv.SetPersistent(true)
-	sv.Set(value)
-	c.AddVar(sv, "", false)
+	c.AddVar(sv, key)
+
+	// we only set the persistent variable if it hasn't been initialized yet
+	if !sv.IsCopy() && !sv.Initialized() {
+		sv.Set(value)
+	}
+
+	return sv
+}
+
+func CachedVar[T any](c Context, value func() T) *VarObj[T] {
+	sv := MakeVarObj[T](c, value)
+	c.AddVar(sv, "")
+
+	if !sv.IsCopy() {
+		sv.Set(value())
+	}
+
 	return sv
 }
 
 func Var[T any](c Context, value T) *VarObj[T] {
-	sv := MakeVarObj[T](c)
-	sv.Set(value)
-	c.AddVar(sv, "", false)
-	return sv
+	return CachedVar(c, func() T { return value })
 }
 
 func GlobalVar[T any](c Context, key string, v T) *VarObj[T] {
 
-	variable := MakeVarObj[T](c)
+	if key == "" {
+		panic("empty key")
+	}
+
+	variable := MakeVarObj[T](c, func() T { return v })
 	variable.Set(v)
 
-	c.AddVar(variable, key, true)
+	c.AddVar(variable, key)
 
 	return variable
 }

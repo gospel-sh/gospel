@@ -46,6 +46,8 @@ func MakeServer(app *App) *Server {
 	}
 }
 
+var makeInMemoryStore = MakeInMemoryStoreRegistry()
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, s.app.StaticPrefix) {
@@ -53,12 +55,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := MakeDefaultContext(r)
+	// we make a persistent store for the session
+	persistentStore := makeInMemoryStore(r)
+	store := MakeStore(persistentStore)
+	ctx := MakeDefaultContext(r, store)
 
 	// we set up the router (it adds itself to the context)...
 	router := MakeRouter(ctx)
 
 	elem := ctx.Execute(s.app.Root)
+
+	store.Finalize()
 
 	if redirectedTo := router.RedirectedTo(); redirectedTo != "" && (redirectedTo != r.URL.Path || r.Method != http.MethodGet) {
 		http.Redirect(w, r, redirectedTo, 302)

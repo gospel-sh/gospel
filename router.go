@@ -141,6 +141,13 @@ func (r *Router) RedirectUp() {
 	r.RedirectTo(r.matchedRoutes[len(r.matchedRoutes)-2].Path)
 }
 
+func (r *Router) CurrentPathWithQuery() string {
+	if len(r.matchedRoutes) == 0 {
+		return ""
+	}
+	return PathWithQuery(r.matchedRoutes[len(r.matchedRoutes)-1].Path, r.Query())
+}
+
 func (r *Router) CurrentPath() string {
 	if len(r.matchedRoutes) == 0 {
 		return ""

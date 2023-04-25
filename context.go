@@ -16,36 +16,36 @@ type Context interface {
 	GetVar(key string) ContextVarObj
 	SetById(id string, value any)
 	GetById(id string) ContextVarObj
-	AddVar(variable ContextVarObj, key string, global bool)
+	AddVar(variable ContextVarObj, key string)
 	AddFunc(callback ContextFuncObj, key string)
 	Interactive() bool
 }
 
 type DefaultContext struct {
-	key             string
-	interactive     bool
-	request         *http.Request
-	root            *DefaultContext
-	Store           *Store
-	PersistentStore PersistentStore
+	key         string
+	interactive bool
+	request     *http.Request
+	root        *DefaultContext
+	Store       *Store
 }
 
 type PersistentStore interface {
-	Get(id string, key string, value interface{}) error
-	Set(id string, key string, value interface{}) error
+	Get(key string) (any, error)
+	Set(key string, value interface{}) error
 }
 
 type Store struct {
 	VariableIndices map[string]int
 	Variables       map[string]ContextVarObj
 	Funcs           map[string][]ContextFuncObj
+	persistentStore PersistentStore
 }
 
-func MakeDefaultContext(request *http.Request) *DefaultContext {
+func MakeDefaultContext(request *http.Request, store *Store) *DefaultContext {
 	dc := &DefaultContext{
 		key:     "root",
 		request: request,
-		Store:   MakeStore(),
+		Store:   store,
 	}
 
 	dc.root = dc
@@ -53,11 +53,12 @@ func MakeDefaultContext(request *http.Request) *DefaultContext {
 	return dc
 }
 
-func MakeStore() *Store {
+func MakeStore(persistentStore PersistentStore) *Store {
 	return &Store{
 		Variables:       make(map[string]ContextVarObj),
 		VariableIndices: make(map[string]int),
 		Funcs:           make(map[string][]ContextFuncObj),
+		persistentStore: persistentStore,
 	}
 }
 
@@ -89,7 +90,16 @@ func (s *Store) AddFunc(key string, callback ContextFuncObj) int {
 	return len(s.Funcs[key])
 }
 
-func (s *Store) AddVar(variable ContextVarObj, key string, global bool) (string, bool) {
+func (s *Store) Finalize() {
+	for key, variable := range s.Variables {
+		if variable.Persistent() {
+			Log.Info("Persisting variable %s: %v", key, variable.GetRaw())
+			s.persistentStore.Set(key, variable.GetRaw())
+		}
+	}
+}
+
+func (s *Store) AddVar(variable ContextVarObj, key string, global bool) {
 
 	var i int
 	var fullKey string
@@ -104,15 +114,27 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) (string,
 		fullKey = key
 	}
 
-	if v, ok := s.Variables[fullKey]; ok {
-		Log.Info("Found previous value: %v", v.GetRaw())
-		return fullKey, true
+	variable.SetId(fullKey)
+
+	if _, ok := s.Variables[fullKey]; ok {
+		variable.SetCopy(true)
+		return
 	}
 
+	// this variable is new
 	variable.SetCopy(false)
+
 	s.Variables[fullKey] = variable
 
-	return fullKey, false
+	// we check if the variable exists in the persistent store
+
+	if variable.Persistent() {
+		if v, err := s.persistentStore.Get(fullKey); err == nil {
+			Log.Info("Persistent value: %v", v)
+			variable.Set(v)
+		}
+	}
+
 }
 
 func (d *DefaultContext) Request() *http.Request {
@@ -181,14 +203,14 @@ func (d *DefaultContext) Modified(variable ContextVarObj) {
 	Log.Info("Variable '%s' modified from '%s'", variable.Id(), d.key)
 }
 
-func (d *DefaultContext) AddVar(variable ContextVarObj, key string, global bool) {
+func (d *DefaultContext) AddVar(variable ContextVarObj, key string) {
+
+	global := true
 
 	if key == "" {
+		global = false
 		key = d.key
 	}
 
-	id, exists := d.root.Store.AddVar(variable, key, global)
-
-	variable.SetId(id)
-	variable.SetCopy(exists)
+	d.root.Store.AddVar(variable, key, global)
 }
