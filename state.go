@@ -1,6 +1,7 @@
 package gospel
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -52,6 +53,29 @@ func (s *VarObj[T]) Reset() {
 	s.Set(s.generator())
 }
 
+func (s *VarObj[T]) Serialize() ([]byte, error) {
+	return json.Marshal(s.value)
+}
+
+func (s *VarObj[T]) Deserialize(data []byte) error {
+
+	nv := *new(T)
+
+	if err := json.Unmarshal(data, &nv); err != nil {
+		return err
+	}
+
+	s.value = nv
+	s.initialized = true
+
+	return nil
+
+}
+
+func (s *VarObj[T]) New() any {
+	return new(T)
+}
+
 func (s *VarObj[T]) GetRaw() any {
 	return s.Get()
 }
@@ -75,12 +99,15 @@ func (s *VarObj[T]) Set(value any) error {
 		s.value = sv
 		s.initialized = true
 	} else {
+		Log.Error("type error: %T vs. %T", value, *new(T))
 		return fmt.Errorf("type error")
 	}
 	return nil
 }
 
 type ContextVarObj interface {
+	Serialize() ([]byte, error)
+	Deserialize([]byte) error
 	SetPersistent(bool)
 	Persistent() bool
 	Initialized() bool
@@ -90,6 +117,7 @@ type ContextVarObj interface {
 	IsCopy() bool
 	Set(any) error
 	GetRaw() any
+	New() any
 }
 
 type FuncObj struct {
