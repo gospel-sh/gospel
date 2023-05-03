@@ -453,7 +453,9 @@ var Style = Attrib("style")
 var Method = Attrib("method")
 var Content = Attrib("content")
 var Alt = Attrib("alt")
+var As = Attrib("as")
 var Placeholder = Attrib("placeholder")
+var Defer = BooleanAttrib("defer")
 
 // HTML Tags
 // https://www.w3.org/TR/2011/WD-html-markup-20110113/syntax.html
