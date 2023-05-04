@@ -146,6 +146,15 @@ func (r *Router) RedirectUp() {
 	}
 }
 
+func (r *Router) RedirectUpBy(i int) {
+
+	if i >= len(r.matchedRoutes) {
+		return
+	}
+
+	r.RedirectTo(r.matchedRoutes[len(r.matchedRoutes)-1-i].Path)
+}
+
 func (r *Router) CurrentPathWithQuery() string {
 	if len(r.matchedRoutes) == 0 {
 		return ""
