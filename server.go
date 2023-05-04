@@ -27,36 +27,6 @@ func (f *PrefixFS) Open(name string) (fs.File, error) {
 	return f.fs.Open(name[len(f.prefix):])
 }
 
-func etagCacheControl(h http.Handler, staticFs http.FileSystem) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(".", r.URL.Path)
-
-		// Check if the file exists and is not a directory
-		file, err := staticFs.Open(filePath)
-		if err == nil {
-			defer file.Close()
-			fileInfo, err := file.Stat()
-			if err == nil && !fileInfo.IsDir() {
-				// Read file contents to compute the ETag
-				fileContents, err := ioutil.ReadAll(file)
-				if err == nil {
-					etag := computeETag(fileContents)
-					w.Header().Set("ETag", etag)
-					w.Header().Set("Cache-Control", "private, no-store, must-revalidate")
-				}
-			}
-		}
-
-		// If the ETag in the request matches the computed ETag, return 304 Not Modified
-		if r.Header.Get("If-None-Match") == w.Header().Get("ETag") {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-
-		h.ServeHTTP(w, r)
-	}
-}
-
 func computeETag(data []byte) string {
 	hash := md5.Sum(data)
 	return fmt.Sprintf(`"%s"`, hex.EncodeToString(hash[:]))
@@ -95,6 +65,7 @@ func MakeServer(app *App) *Server {
 }
 
 var makeInMemoryStore = MakeInMemoryStoreRegistry()
+var makeCookieStore = MakeCookieStoreRegistry()
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
@@ -130,7 +101,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// we make a persistent store for the session
-	persistentStore := makeInMemoryStore(r)
+	persistentStore := makeCookieStore(r)
 	store := MakeStore(persistentStore)
 	ctx := MakeDefaultContext(r, store)
 
@@ -140,6 +111,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	elem := ctx.Execute(s.app.Root)
 
 	store.Finalize()
+	persistentStore.Finalize(w)
 
 	if redirectedTo := router.RedirectedTo(); redirectedTo != "" && (redirectedTo != r.URL.Path || r.Method != http.MethodGet) {
 		http.Redirect(w, r, redirectedTo, 302)
