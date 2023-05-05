@@ -122,7 +122,7 @@ type ContextVarObj interface {
 
 type FuncObj[T any] struct {
 	context Context
-	value   func(T any)
+	value   func()
 	id      string
 }
 
@@ -132,7 +132,7 @@ func (c *FuncObj[T]) SetId(id string) {
 
 func (c *FuncObj[T]) Call() {
 	if c.context.Interactive() {
-		c.value(*new(T))
+		c.value()
 	}
 }
 
@@ -162,7 +162,7 @@ type Opts struct {
 	Foo string
 }
 
-func Func[T any](c Context, value func(T any)) *FuncObj[T] {
+func Func[T any](c Context, value func()) *FuncObj[T] {
 
 	var f Opts = Convert[Opts](Opts{"Test"})
 

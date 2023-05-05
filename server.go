@@ -120,7 +120,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("content-type", "text/html")
 
-	w.WriteHeader(200)
+	w.WriteHeader(ctx.StatusCode())
+
 	w.Write([]byte(elem.RenderElement(ctx)))
 }
 

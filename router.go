@@ -197,15 +197,17 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 		}
 
 		re, err := regexp.Compile(routeConfig.Route)
+
 		if err != nil {
 			Log.Warning("Cannot compile route '%s': %v", routeConfig.Route, err)
 			continue
 		}
+
 		Log.Info("%s - %s", path, routeConfig.Route)
 		match := re.FindStringSubmatch(path)
 
 		if len(match) > 0 {
-			Log.Info("%v", match)
+			Log.Info("Match: %v", match)
 
 			matchedRoute := &MatchedRoute{
 				Config:    routeConfig,

@@ -16,6 +16,8 @@ type Context interface {
 	GetVar(key string) ContextVarObj
 	SetById(id string, value any) error
 	GetById(id string) ContextVarObj
+	StatusCode() int
+	SetStatusCode(int)
 	AddVar(variable ContextVarObj, key string) error
 	AddFunc(callback ContextFuncObj[any], key string)
 	Interactive() bool
@@ -24,6 +26,7 @@ type Context interface {
 type DefaultContext struct {
 	key         string
 	interactive bool
+	statusCode  int
 	request     *http.Request
 	root        *DefaultContext
 	Store       *Store
@@ -43,9 +46,10 @@ type Store struct {
 
 func MakeDefaultContext(request *http.Request, store *Store) *DefaultContext {
 	dc := &DefaultContext{
-		key:     "root",
-		request: request,
-		Store:   store,
+		key:        "root",
+		request:    request,
+		Store:      store,
+		statusCode: 200,
 	}
 
 	dc.root = dc
@@ -135,6 +139,14 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) error {
 
 	return nil
 
+}
+
+func (d *DefaultContext) StatusCode() int {
+	return d.root.statusCode
+}
+
+func (d *DefaultContext) SetStatusCode(code int) {
+	d.root.statusCode = code
 }
 
 func (d *DefaultContext) Request() *http.Request {
