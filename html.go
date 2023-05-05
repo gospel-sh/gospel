@@ -3,6 +3,7 @@ package gospel
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 )
 
 type Element interface {
@@ -334,14 +335,16 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 	}
 }
 
+type FormValues url.Values
+
 func Submittable() HTMLElementDecorator {
 	// Check if there's an OnSubmit attribute with a callback
-	// If given, add some JS code to ensure we call it
+	// If given, add some J Scode to ensure we call it
 	return func(element *HTMLElement) {
 
 		submitMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
 			if htmlAttrib.Name == "onSubmit" {
-				f, ok := htmlAttrib.Value.(ContextFuncObj)
+				f, ok := htmlAttrib.Value.(ContextFuncObj[any])
 				if !ok {
 					Log.Warning("uh oh: not a function")
 					return nil

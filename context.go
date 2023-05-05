@@ -17,7 +17,7 @@ type Context interface {
 	SetById(id string, value any) error
 	GetById(id string) ContextVarObj
 	AddVar(variable ContextVarObj, key string) error
-	AddFunc(callback ContextFuncObj, key string)
+	AddFunc(callback ContextFuncObj[any], key string)
 	Interactive() bool
 }
 
@@ -37,7 +37,7 @@ type PersistentStore interface {
 type Store struct {
 	VariableIndices map[string]int
 	Variables       map[string]ContextVarObj
-	Funcs           map[string][]ContextFuncObj
+	Funcs           map[string][]ContextFuncObj[any]
 	persistentStore PersistentStore
 }
 
@@ -57,7 +57,7 @@ func MakeStore(persistentStore PersistentStore) *Store {
 	return &Store{
 		Variables:       make(map[string]ContextVarObj),
 		VariableIndices: make(map[string]int),
-		Funcs:           make(map[string][]ContextFuncObj),
+		Funcs:           make(map[string][]ContextFuncObj[any]),
 		persistentStore: persistentStore,
 	}
 }
@@ -75,7 +75,7 @@ func (s *Store) GetById(id string) ContextVarObj {
 }
 
 func (s *Store) Flush() {
-	s.Funcs = make(map[string][]ContextFuncObj)
+	s.Funcs = make(map[string][]ContextFuncObj[any])
 	s.VariableIndices = make(map[string]int)
 }
 
@@ -86,7 +86,7 @@ func (s *Store) GetVar(key string) ContextVarObj {
 	return nil
 }
 
-func (s *Store) AddFunc(key string, callback ContextFuncObj) int {
+func (s *Store) AddFunc(key string, callback ContextFuncObj[any]) int {
 	s.Funcs[key] = append(s.Funcs[key], callback)
 	return len(s.Funcs[key])
 }
@@ -193,7 +193,7 @@ func (d *DefaultContext) GetVar(key string) ContextVarObj {
 	return d.root.Store.GetVar(key)
 }
 
-func (d *DefaultContext) AddFunc(function ContextFuncObj, key string) {
+func (d *DefaultContext) AddFunc(function ContextFuncObj[any], key string) {
 	i := d.root.Store.AddFunc(d.key, function)
 	Log.Info("Adding function %s.%d", d.key, i)
 	function.SetId(fmt.Sprintf("%s.%d", d.key, i))
