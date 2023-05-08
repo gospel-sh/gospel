@@ -3,7 +3,10 @@ package gospel
 import (
 	"encoding/hex"
 	"fmt"
+	"mime"
+	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Element interface {
@@ -335,6 +338,28 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 	}
 }
 
+// Determine whether the request `content-type` includes a
+// server-acceptable mime-type
+//
+// Failure should yield an HTTP 415 (`http.StatusUnsupportedMediaType`)
+func HasContentType(r *http.Request, mimetype string) bool {
+	contentType := r.Header.Get("Content-type")
+	if contentType == "" {
+		return mimetype == "application/octet-stream"
+	}
+
+	for _, v := range strings.Split(contentType, ",") {
+		t, _, err := mime.ParseMediaType(v)
+		if err != nil {
+			break
+		}
+		if t == mimetype {
+			return true
+		}
+	}
+	return false
+}
+
 type FormValues url.Values
 
 func Submittable() HTMLElementDecorator {
@@ -357,7 +382,12 @@ func Submittable() HTMLElementDecorator {
 
 				if req.Method == "POST" && c.Interactive() {
 
-					if err := req.ParseForm(); err != nil {
+					if HasContentType(req, "multipart/form-data") {
+						if err := req.ParseMultipartForm(1024 * 1024 * 10); err != nil {
+							Log.Error("Cannot parse form: %v", err)
+							return nil
+						}
+					} else if err := req.ParseForm(); err != nil {
 						Log.Error("Cannot parse form: %v", err)
 						return nil
 					}
@@ -370,8 +400,6 @@ func Submittable() HTMLElementDecorator {
 						// we call the function
 
 						f.Call()
-
-						Log.Info("%v", req.Form)
 
 					}
 
@@ -457,6 +485,7 @@ var Method = Attrib("method")
 var Content = Attrib("content")
 var Alt = Attrib("alt")
 var As = Attrib("as")
+var Enctype = Attrib("enctype")
 var Placeholder = Attrib("placeholder")
 var Defer = BooleanAttrib("defer")
 
