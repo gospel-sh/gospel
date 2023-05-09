@@ -6,11 +6,14 @@ import (
 )
 
 type ElementFunction func(c Context) Element
+type RespondWithFunction func(c Context, w http.ResponseWriter)
 
 type Context interface {
 	Request() *http.Request
 	Execute(ElementFunction) Element
 	Modified(variable ContextVarObj)
+	SetRespondWith(RespondWithFunction)
+	RespondWith() RespondWithFunction
 	ElementFunction(string, ElementFunction) ElementFunction
 	Element(string, ElementFunction) Element
 	GetVar(key string) ContextVarObj
@@ -27,6 +30,7 @@ type DefaultContext struct {
 	key         string
 	interactive bool
 	statusCode  int
+	respondWith RespondWithFunction
 	request     *http.Request
 	root        *DefaultContext
 	Store       *Store
@@ -139,6 +143,14 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) error {
 
 	return nil
 
+}
+
+func (d *DefaultContext) SetRespondWith(f RespondWithFunction) {
+	d.root.respondWith = f
+}
+
+func (d *DefaultContext) RespondWith() RespondWithFunction {
+	return d.root.respondWith
 }
 
 func (d *DefaultContext) StatusCode() int {

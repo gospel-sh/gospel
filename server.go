@@ -118,10 +118,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ctx.RespondWith() != nil {
+		ctx.RespondWith()(ctx, w)
+		return
+	}
+
 	w.Header().Add("content-type", "text/html")
-
 	w.WriteHeader(ctx.StatusCode())
-
 	w.Write([]byte(elem.RenderElement(ctx)))
 }
 
