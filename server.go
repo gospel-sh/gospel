@@ -103,7 +103,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// we make a persistent store for the session
 	persistentStore := makeCookieStore(r)
 	store := MakeStore(persistentStore)
-	ctx := MakeDefaultContext(r, store)
+	ctx := MakeDefaultContext(r, w, store)
 
 	// we set up the router (it adds itself to the context)...
 	router := MakeRouter(ctx)

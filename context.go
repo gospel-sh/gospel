@@ -24,6 +24,7 @@ type Context interface {
 	AddVar(variable ContextVarObj, key string) error
 	AddFunc(callback ContextFuncObj[any], key string)
 	Interactive() bool
+	ResponseWriter() http.ResponseWriter
 }
 
 type DefaultContext struct {
@@ -32,6 +33,7 @@ type DefaultContext struct {
 	statusCode  int
 	respondWith RespondWithFunction
 	request     *http.Request
+	writer      http.ResponseWriter
 	root        *DefaultContext
 	Store       *Store
 }
@@ -48,10 +50,11 @@ type Store struct {
 	persistentStore PersistentStore
 }
 
-func MakeDefaultContext(request *http.Request, store *Store) *DefaultContext {
+func MakeDefaultContext(request *http.Request, writer http.ResponseWriter, store *Store) *DefaultContext {
 	dc := &DefaultContext{
 		key:        "root",
 		request:    request,
+		writer:     writer,
 		Store:      store,
 		statusCode: 200,
 	}
@@ -143,6 +146,10 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) error {
 
 	return nil
 
+}
+
+func (d *DefaultContext) ResponseWriter() http.ResponseWriter {
+	return d.root.writer
 }
 
 func (d *DefaultContext) SetRespondWith(f RespondWithFunction) {
