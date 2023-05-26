@@ -11,7 +11,6 @@ type RespondWithFunction func(c Context, w http.ResponseWriter)
 type Context interface {
 	Request() *http.Request
 	Execute(ElementFunction) Element
-	Modified(variable ContextVarObj)
 	SetRespondWith(RespondWithFunction)
 	RespondWith() RespondWithFunction
 	ElementFunction(string, ElementFunction) ElementFunction
@@ -105,7 +104,6 @@ func (s *Store) AddFunc(key string, callback ContextFuncObj[any]) int {
 func (s *Store) Finalize() {
 	for key, variable := range s.Variables {
 		if variable.Persistent() {
-			Log.Info("Persisting variable %s: %v", key, variable.GetRaw())
 			s.persistentStore.Set(key, variable)
 		}
 	}
@@ -194,8 +192,6 @@ func (d *DefaultContext) ElementFunction(key string, elementFunction ElementFunc
 
 func (d *DefaultContext) Element(key string, elementFunction ElementFunction) Element {
 
-	Log.Info("Memorizing key %s.%s", d.key, key)
-
 	c := &DefaultContext{
 		key:  fmt.Sprintf("%s.%s", d.key, key),
 		root: d.root,
@@ -212,7 +208,6 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	// interactive tree generation (i.e. call functions to modify variables)
 	elementFunction(d)
 	d.root.Store.Flush()
-	Log.Info("Flushing...")
 	// non-interactive tree generation (i.e. do not modify variables)
 	// to do: only rerender parts that have changed during the interactive part...
 	d.root.interactive = false
@@ -220,19 +215,13 @@ func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 }
 
 func (d *DefaultContext) GetVar(key string) ContextVarObj {
-	Log.Info("Variable '%s' requested from '%s'...", key, d.key)
 	return d.root.Store.GetVar(key)
 }
 
 func (d *DefaultContext) AddFunc(function ContextFuncObj[any], key string) {
 	i := d.root.Store.AddFunc(d.key, function)
-	Log.Info("Adding function %s.%d", d.key, i)
 	function.SetId(fmt.Sprintf("%s.%d", d.key, i))
 
-}
-
-func (d *DefaultContext) Modified(variable ContextVarObj) {
-	Log.Info("Variable '%s' modified from '%s'", variable.Id(), d.key)
 }
 
 func (d *DefaultContext) AddVar(variable ContextVarObj, key string) error {

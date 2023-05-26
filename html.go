@@ -308,8 +308,6 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 
 		valueMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
 
-			Log.Info("Name: %s", htmlAttrib.Name)
-
 			if htmlAttrib.Name == "gospel-value" {
 				v, ok := htmlAttrib.Value.(ContextVarObj)
 
@@ -317,8 +315,6 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 					Log.Warning("uh oh: not a context var")
 					return nil
 				}
-
-				Log.Info("Variable: %s", v.Id())
 
 				if values, ok := form[v.Id()]; ok && len(values) > 0 {
 					value := values[0]
@@ -334,7 +330,6 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 		// we recurse into child elements...
 		assignVars(c, form, htmlChild)
 
-		Log.Info("%s", htmlChild.Tag)
 	}
 }
 

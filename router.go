@@ -203,11 +203,9 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 			continue
 		}
 
-		Log.Info("%s - %s", path, routeConfig.Route)
 		match := re.FindStringSubmatch(path)
 
 		if len(match) > 0 {
-			Log.Info("Match: %v", match)
 
 			matchedRoute := &MatchedRoute{
 				Config:    routeConfig,

@@ -98,7 +98,7 @@ func (s *VarObj[T]) Set(value any) error {
 	} else if sv, ok := value.(T); ok {
 		s.value = sv
 		s.initialized = true
-	} else {
+	} else if value != nil {
 		Log.Error("type error: %T vs. %T", value, *new(T))
 		return fmt.Errorf("type error")
 	}
@@ -163,11 +163,6 @@ type Opts struct {
 }
 
 func Func[T any](c Context, value func()) *FuncObj[T] {
-
-	var f Opts = Convert[Opts](Opts{"Test"})
-
-	Log.Info("%v", f)
-
 	cf := &FuncObj[T]{c, value, ""}
 	c.AddFunc(cf, "")
 	return cf

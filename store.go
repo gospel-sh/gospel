@@ -88,7 +88,6 @@ func MakeInMemoryStore(data map[string][]byte) *InMemoryStore {
 
 func (i *InMemoryStore) Finalize(w http.ResponseWriter) {
 	// we set the session cookie
-	Log.Info("Finalizing in-memory store...")
 	http.SetCookie(w, &http.Cookie{Path: "/", Name: "session", Value: "foo", Secure: false, HttpOnly: true, Expires: time.Now().Add(365 * 24 * 7 * time.Hour)})
 }
 
