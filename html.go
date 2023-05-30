@@ -461,6 +461,7 @@ func VoidTag(tag string, decorators ...any) func(args ...any) Element {
 
 // HTML Attributes
 
+var Role = Attrib("role")
 var Lang = Attrib("lang")
 var Charset = Attrib("charset")
 var Rel = Attrib("rel")
