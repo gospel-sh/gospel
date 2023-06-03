@@ -20,8 +20,10 @@ type Attribute interface {
 type HTMLElement struct {
 	Tag        string
 	Void       bool
-	Children   []Element
-	Attributes []Attribute
+	Value      any
+	Children   []*HTMLElement
+	Attributes []*HTMLAttribute
+	Args       []any
 }
 
 type HTMLAttribute struct {
@@ -93,6 +95,11 @@ func (a *HTMLAttribute) RenderAttribute(c Context) string {
 
 func (h *HTMLElement) RenderElement(c Context) string {
 
+	if strValue, ok := h.Value.(string); ok {
+		// this is a literal element
+		return strValue
+	}
+
 	renderedAttributes := ""
 
 	for _, attribute := range h.Attributes {
@@ -110,58 +117,62 @@ func (h *HTMLElement) RenderElement(c Context) string {
 		return fmt.Sprintf("<%[1]s%[2]s/>", h.Tag, renderedAttributes)
 	} else {
 
-		renderedChildren := ""
-
-		for _, child := range h.Children {
-
-			if child == nil {
-				continue
-			}
-
-			renderedChildren += child.RenderElement(c)
-		}
+		renderedChildren := h.RenderChildren(c)
 
 		return fmt.Sprintf("<%[1]s%[3]s>%[2]s</%[1]s>", h.Tag, renderedChildren, renderedAttributes)
 	}
 
 }
 
-type Literal struct {
-	Value string
+func (h *HTMLElement) RenderChildren(c Context) string {
+	renderedChildren := ""
+
+	for _, child := range h.Children {
+
+		if child == nil {
+			continue
+		}
+
+		renderedChildren += child.RenderElement(c)
+	}
+
+	return renderedChildren
 }
 
-func (l *Literal) RenderElement(c Context) string {
-	return l.Value
+func Literal(value string) *HTMLElement {
+	return &HTMLElement{
+		Value: value,
+	}
 }
 
-func children(args ...any) (chldr []Element) {
+func children(args ...any) (chldr []*HTMLElement) {
 
-	chldr = make([]Element, 0, len(args))
+	chldr = make([]*HTMLElement, 0, len(args))
 
 	for _, arg := range args {
 		if elementList, ok := arg.([]Element); ok {
-			chldr = append(chldr, elementList...)
+			chldr = append(chldr, children(elementList)...)
 		} else if anyList, ok := arg.([]any); ok {
 			chldr = append(chldr, children(anyList...)...)
-		} else if elem, ok := arg.(Element); ok {
+		} else if elem, ok := arg.(*HTMLElement); ok {
 			chldr = append(chldr, elem)
 		} else if str, ok := arg.(string); ok {
-			chldr = append(chldr, &Literal{str})
+			chldr = append(chldr, Literal(str))
 		}
 	}
 
 	return
 }
 
-func attributes(args ...any) (attribs []Attribute) {
+func attributes(args ...any) (attribs []*HTMLAttribute) {
 
-	attribs = make([]Attribute, 0, len(args))
+	attribs = make([]*HTMLAttribute, 0, len(args))
 
 	for _, arg := range args {
-		if elem, ok := arg.(Attribute); ok {
+		if elem, ok := arg.(*HTMLAttribute); ok {
 			attribs = append(attribs, elem)
 		} else if attribList, ok := arg.([]Attribute); ok {
-			attribs = append(attribs, attribList...)
+			attribs = append(attribs, attributes(attribList)...)
 		} else if anyList, ok := arg.([]any); ok {
 			attribs = append(attribs, attributes(anyList...)...)
 		}
@@ -170,19 +181,13 @@ func attributes(args ...any) (attribs []Attribute) {
 	return
 }
 
-type Fragment struct {
-	Children []Element
-}
-
 type HTMLElementDecorator func(*HTMLElement)
 
-func mapHTMLAttributes(attribs []Attribute, mapper func(*HTMLAttribute) []Attribute) []Attribute {
-	newAttribs := make([]Attribute, 0, len(attribs))
+func mapHTMLAttributes(attribs []*HTMLAttribute, mapper func(*HTMLAttribute) []*HTMLAttribute) []*HTMLAttribute {
+	newAttribs := make([]*HTMLAttribute, 0, len(attribs))
 
 	for _, attrib := range attribs {
-		if htmlAttrib, ok := attrib.(*HTMLAttribute); ok {
-			newAttribs = append(newAttribs, mapper(htmlAttrib)...)
-		}
+		newAttribs = append(newAttribs, mapper(attrib)...)
 	}
 
 	return newAttribs
@@ -195,7 +200,7 @@ func Selectable() HTMLElementDecorator {
 
 		var selectedValue ContextVarObj
 
-		mapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+		mapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "value" {
 
@@ -204,7 +209,7 @@ func Selectable() HTMLElementDecorator {
 				selectedValue, ok = htmlAttrib.Value.(ContextVarObj)
 
 				if ok {
-					return []Attribute{&HTMLAttribute{
+					return []*HTMLAttribute{&HTMLAttribute{
 						Name:  "name",
 						Value: selectedValue.Id(),
 					},
@@ -218,7 +223,7 @@ func Selectable() HTMLElementDecorator {
 
 			}
 
-			return []Attribute{htmlAttrib}
+			return []*HTMLAttribute{htmlAttrib}
 
 		}
 
@@ -232,34 +237,22 @@ func Selectable() HTMLElementDecorator {
 
 		for _, child := range element.Children {
 
-			htmlChild, ok := child.(*HTMLElement)
-
-			if !ok {
-				continue
-			}
-
-			if htmlChild.Tag != "option" {
+			if child.Tag != "option" {
 				continue
 			}
 
 			var value any
 
-			for _, attrib := range htmlChild.Attributes {
+			for _, attrib := range child.Attributes {
 
-				htmlAttrib, ok := attrib.(*HTMLAttribute)
-
-				if !ok {
-					continue
-				}
-
-				if htmlAttrib.Name == "value" {
-					value = htmlAttrib.Value
+				if attrib.Name == "value" {
+					value = attrib.Value
 					break
 				}
 			}
 
 			if value == selectedValue.GetRaw() {
-				htmlChild.Attributes = append(htmlChild.Attributes, BooleanAttrib("selected")())
+				child.Attributes = append(child.Attributes, BooleanAttrib("selected")())
 			}
 		}
 	}
@@ -268,20 +261,20 @@ func Selectable() HTMLElementDecorator {
 func Assignable() HTMLElementDecorator {
 	return func(element *HTMLElement) {
 
-		assignableMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+		assignableMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "value" {
 				v, ok := htmlAttrib.Value.(ContextVarObj)
 
 				if !ok {
 					// this is a regular attribute
-					return []Attribute{htmlAttrib}
+					return []*HTMLAttribute{htmlAttrib}
 				}
 
 				htmlAttrib.Name = "gospel-value"
 				htmlAttrib.Hidden = true
 
-				return []Attribute{htmlAttrib, &HTMLAttribute{
+				return []*HTMLAttribute{htmlAttrib, &HTMLAttribute{
 					Name:  "value",
 					Value: v.GetRaw(),
 				}, &HTMLAttribute{
@@ -290,7 +283,7 @@ func Assignable() HTMLElementDecorator {
 				}}
 			}
 
-			return []Attribute{htmlAttrib}
+			return []*HTMLAttribute{htmlAttrib}
 		}
 
 		element.Attributes = mapHTMLAttributes(element.Attributes, assignableMapper)
@@ -300,13 +293,8 @@ func Assignable() HTMLElementDecorator {
 
 func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 	for _, child := range element.Children {
-		htmlChild, ok := child.(*HTMLElement)
 
-		if !ok {
-			continue
-		}
-
-		valueMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+		valueMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "gospel-value" {
 				v, ok := htmlAttrib.Value.(ContextVarObj)
@@ -325,10 +313,10 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 			return nil
 		}
 
-		mapHTMLAttributes(htmlChild.Attributes, valueMapper)
+		mapHTMLAttributes(child.Attributes, valueMapper)
 
 		// we recurse into child elements...
-		assignVars(c, form, htmlChild)
+		assignVars(c, form, child)
 
 	}
 }
@@ -362,7 +350,7 @@ func Submittable() HTMLElementDecorator {
 	// If given, add some J Scode to ensure we call it
 	return func(element *HTMLElement) {
 
-		submitMapper := func(htmlAttrib *HTMLAttribute) []Attribute {
+		submitMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 			if htmlAttrib.Name == "onSubmit" {
 				f, ok := htmlAttrib.Value.(ContextFuncObj[any])
 				if !ok {
@@ -403,38 +391,34 @@ func Submittable() HTMLElementDecorator {
 				// we append the ID of the form
 				element.Children = append(element.Children, Input(Type("hidden"), Name("_gospel_id"), Value(f.Id())))
 
-				return []Attribute{&HTMLAttribute{
+				return []*HTMLAttribute{&HTMLAttribute{
 					Name:  "gospel-onSubmit",
 					Value: f.Id(),
 				}}
 			}
 
-			return []Attribute{htmlAttrib}
+			return []*HTMLAttribute{htmlAttrib}
 		}
 
 		element.Attributes = mapHTMLAttributes(element.Attributes, submitMapper)
 	}
 }
 
-func (f *Fragment) RenderElement(c Context) string {
-	renderedElements := ""
-
-	for _, element := range f.Children {
-		renderedElements += element.RenderElement(c)
-	}
-
-	return renderedElements
-}
-
 func F(args ...any) Element {
-	return &Fragment{
+	return &HTMLElement{
 		Children: children(args...),
 	}
 }
 
-func makeTag(tag string, args []any, void bool, decorators []any) Element {
+func makeTag(tag string, args []any, void bool, decorators []any) *HTMLElement {
 
-	element := &HTMLElement{tag, void, children(args...), attributes(args...)}
+	element := &HTMLElement{
+		Tag:        tag,
+		Void:       void,
+		Children:   children(args...),
+		Attributes: attributes(args...),
+		Args:       args,
+	}
 
 	// we apply all decorators to the element
 	for _, decorator := range decorators {
@@ -447,14 +431,14 @@ func makeTag(tag string, args []any, void bool, decorators []any) Element {
 
 }
 
-func Tag(tag string, decorators ...any) func(args ...any) Element {
-	return func(args ...any) Element {
+func Tag(tag string, decorators ...any) func(args ...any) *HTMLElement {
+	return func(args ...any) *HTMLElement {
 		return makeTag(tag, args, false, decorators)
 	}
 }
 
-func VoidTag(tag string, decorators ...any) func(args ...any) Element {
-	return func(args ...any) Element {
+func VoidTag(tag string, decorators ...any) func(args ...any) *HTMLElement {
+	return func(args ...any) *HTMLElement {
 		return makeTag(tag, args, true, decorators)
 	}
 }
@@ -607,4 +591,6 @@ var Track = VoidTag("track")
 var Wbr = VoidTag("wbr")
 
 // Special tags
-var Doctype = func(doctype string) *Literal { return &Literal{fmt.Sprintf("<!doctype %s>", doctype)} }
+var Doctype = func(doctype string) *HTMLAttribute {
+	return &HTMLAttribute{Value: fmt.Sprintf("<!doctype %s>", doctype)}
+}
