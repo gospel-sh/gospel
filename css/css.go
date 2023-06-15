@@ -49,10 +49,20 @@ func CSS(children ...*gospel.HTMLElement) gospel.Element {
 	}
 }
 
+type ContextValue interface {
+	Get(*Context) any
+}
+
 func (c *Class) Render(context *Context) string {
 	// we render the CSS class or style attribute
-	// at
-	return gospel.Fmt("%s: %v;", c.Property, c.Value)
+
+	v := c.Value
+
+	if vr, ok := v.(ContextValue); ok {
+		v = vr.Get(context)
+	}
+
+	return gospel.Fmt("%s: %v;", c.Property, v)
 }
 
 type Class struct {
@@ -60,16 +70,29 @@ type Class struct {
 	Value    any
 }
 
-func Width(value any) *Class {
-	return &Class{
-		Property: "width",
-		Value:    value,
+func Prop(property string) func(value any) *Class {
+	return func(value any) *Class {
+		return &Class{
+			Property: property,
+			Value:    value,
+		}
 	}
 }
 
-func Flex() *Class {
-	return &Class{
-		Property: "display",
-		Value:    "flex",
-	}
-}
+// Flexbox
+
+var Flex = Prop("display")("flex")
+var FlexDirection = Prop("flex-direction")
+var AlignItems = Prop("align-items")
+var JustifyContent = Prop("justify-content")
+
+// Line height
+
+var LineHeight = Prop("line-height")
+
+// Geometry
+
+var Width = Prop("width")
+var Height = Prop("height")
+var MaxWidth = Prop("max-width")
+var MinWidth = Prop("min-width")
