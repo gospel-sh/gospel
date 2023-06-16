@@ -404,7 +404,7 @@ func Submittable() HTMLElementDecorator {
 	}
 }
 
-func F(args ...any) Element {
+func F(args ...any) *HTMLElement {
 	return &HTMLElement{
 		Children: children(args...),
 	}
