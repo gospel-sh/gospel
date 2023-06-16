@@ -119,6 +119,10 @@ func (h *HTMLElement) RenderElement(c Context) string {
 
 		renderedChildren := h.RenderChildren(c)
 
+		if h.Tag == "" {
+			return renderedChildren
+		}
+
 		return fmt.Sprintf("<%[1]s%[3]s>%[2]s</%[1]s>", h.Tag, renderedChildren, renderedAttributes)
 	}
 
@@ -151,7 +155,13 @@ func children(args ...any) (chldr []*HTMLElement) {
 
 	for _, arg := range args {
 		if elementList, ok := arg.([]Element); ok {
-			chldr = append(chldr, children(elementList)...)
+			for _, elem := range elementList {
+				chldr = append(chldr, children(elem)...)
+			}
+		} else if htmlList, ok := arg.([]*HTMLElement); ok {
+			for _, elem := range htmlList {
+				chldr = append(chldr, children(elem)...)
+			}
 		} else if anyList, ok := arg.([]any); ok {
 			chldr = append(chldr, children(anyList...)...)
 		} else if elem, ok := arg.(*HTMLElement); ok {
