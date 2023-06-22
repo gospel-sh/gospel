@@ -22,6 +22,7 @@ type HTMLElement struct {
 	Tag        string
 	Void       bool
 	Value      any
+	Safe       bool
 	Children   []*HTMLElement
 	Attributes []*HTMLAttribute
 	Args       []any
@@ -81,22 +82,33 @@ func (a *HTMLAttribute) RenderAttribute(c Context) string {
 
 		for _, arg := range a.Args {
 			if strArg, ok := arg.(string); ok {
-				extraArgs += " " + strArg
+				extraArgs += " " + html.EscapeString(strArg)
 			}
 		}
 
 	}
 
 	if a.Value == nil {
-		return fmt.Sprintf("%s", a.Name)
+		return fmt.Sprintf("%s", html.EscapeString(a.Name))
 	}
 
-	return fmt.Sprintf("%s=\"%s%s\"", a.Name, a.Value, extraArgs)
+	strValue, ok := a.Value.(string)
+
+	if !ok {
+		return ""
+	}
+
+	return fmt.Sprintf("%s=\"%s%s\"", html.EscapeString(a.Name), html.EscapeString(strValue), extraArgs)
 }
 
 func (h *HTMLElement) RenderElement(c Context) string {
 
 	if strValue, ok := h.Value.(string); ok {
+
+		if h.Safe {
+			return strValue
+		}
+
 		// this is a literal element
 		return html.EscapeString(strValue)
 	}
@@ -144,9 +156,17 @@ func (h *HTMLElement) RenderChildren(c Context) string {
 	return renderedChildren
 }
 
+func SafeLiteral(value string) *HTMLElement {
+	return &HTMLElement{
+		Value: value,
+		Safe:  true,
+	}
+}
+
 func Literal(value string) *HTMLElement {
 	return &HTMLElement{
 		Value: value,
+		Safe:  false,
 	}
 }
 
@@ -599,6 +619,9 @@ var Summary = Tag("summary")
 var Slot = Tag("slot")
 var Template = Tag("template")
 var Select = Tag("select", Selectable())
+
+// Safe values
+var Nbsp = SafeLiteral("&nbsp;")
 
 // HTML Void Tags
 
