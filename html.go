@@ -3,6 +3,7 @@ package gospel
 import (
 	"encoding/hex"
 	"fmt"
+	"html"
 	"mime"
 	"net/http"
 	"net/url"
@@ -97,7 +98,7 @@ func (h *HTMLElement) RenderElement(c Context) string {
 
 	if strValue, ok := h.Value.(string); ok {
 		// this is a literal element
-		return strValue
+		return html.EscapeString(strValue)
 	}
 
 	renderedAttributes := ""
@@ -268,7 +269,7 @@ func Selectable() HTMLElementDecorator {
 	}
 }
 
-func Assignable() HTMLElementDecorator {
+func Assignable(asChild bool) HTMLElementDecorator {
 	return func(element *HTMLElement) {
 
 		assignableMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
@@ -283,6 +284,24 @@ func Assignable() HTMLElementDecorator {
 
 				htmlAttrib.Name = "gospel-value"
 				htmlAttrib.Hidden = true
+
+				if asChild {
+
+					strValue, ok := v.GetRaw().(string)
+
+					if !ok {
+						// to do: add a warning
+						return []*HTMLAttribute{htmlAttrib}
+					}
+
+					element.Children = append(element.Children, Literal(strValue))
+
+					return []*HTMLAttribute{htmlAttrib, &HTMLAttribute{
+						Name:  "name",
+						Value: v.Id(),
+					}}
+
+				}
 
 				return []*HTMLAttribute{htmlAttrib, &HTMLAttribute{
 					Name:  "value",
@@ -573,7 +592,7 @@ var Optgroup = Tag("optgroup")
 var Option = Tag("option")
 var Output = Tag("output")
 var Progress = Tag("progress")
-var Textarea = Tag("textarea")
+var Textarea = Tag("textarea", Assignable(true))
 var Details = Tag("details")
 var Dialog = Tag("dialog")
 var Summary = Tag("summary")
@@ -591,7 +610,7 @@ var Command = VoidTag("command")
 var Embed = VoidTag("embed")
 var Hr = VoidTag("hr")
 var Img = VoidTag("img")
-var Input = VoidTag("input", Assignable())
+var Input = VoidTag("input", Assignable(false))
 var Keygen = VoidTag("keygen")
 var Link = VoidTag("link")
 var Meta = VoidTag("meta")
