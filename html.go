@@ -459,7 +459,7 @@ func F(args ...any) *HTMLElement {
 	}
 }
 
-func makeTag(tag string, args []any, void bool, decorators []any) *HTMLElement {
+func makeTag(tag string, args []any, void bool, decorators []HTMLElementDecorator) *HTMLElement {
 
 	element := &HTMLElement{
 		Tag:        tag,
@@ -471,22 +471,29 @@ func makeTag(tag string, args []any, void bool, decorators []any) *HTMLElement {
 
 	// we apply all decorators to the element
 	for _, decorator := range decorators {
-		if df, ok := decorator.(HTMLElementDecorator); ok {
-			df(element)
-		}
+		decorator(element)
 	}
 
 	return element
 
 }
 
-func Tag(tag string, decorators ...any) func(args ...any) *HTMLElement {
+// Marks children of a script node as safe so that we don't escape special characters...
+func isScript(element *HTMLElement) {
+	for _, child := range element.Children {
+		if child.Value != "" {
+			child.Safe = true
+		}
+	}
+}
+
+func Tag(tag string, decorators ...HTMLElementDecorator) func(args ...any) *HTMLElement {
 	return func(args ...any) *HTMLElement {
 		return makeTag(tag, args, false, decorators)
 	}
 }
 
-func VoidTag(tag string, decorators ...any) func(args ...any) *HTMLElement {
+func VoidTag(tag string, decorators ...HTMLElementDecorator) func(args ...any) *HTMLElement {
 	return func(args ...any) *HTMLElement {
 		return makeTag(tag, args, true, decorators)
 	}
@@ -589,7 +596,7 @@ var Svg = Tag("svg")
 var Math = Tag("math")
 var Canvas = Tag("canvas")
 var Noscript = Tag("noscript")
-var Script = Tag("script")
+var Script = Tag("script", isScript)
 var Del = Tag("del")
 var Ins = Tag("ins")
 var Caption = Tag("caption")
