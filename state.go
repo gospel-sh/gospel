@@ -13,6 +13,7 @@ type VarObj[T any] struct {
 	copy        bool
 	persistent  bool
 	initialized bool
+	clear       bool
 }
 
 func MakeVarObj[T any](context Context, generator func() T) *VarObj[T] {
@@ -82,6 +83,10 @@ func (s *VarObj[T]) GetRaw() any {
 
 func (s *VarObj[T]) Persistent() bool {
 	return s.persistent
+}
+
+func (s *VarObj[T]) Clear() {
+	s.clear = true
 }
 
 func (s *VarObj[T]) SetPersistent(value bool) {

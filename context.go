@@ -24,6 +24,7 @@ type Context interface {
 	AddFunc(callback ContextFuncObj[any], key string)
 	Interactive() bool
 	ResponseWriter() http.ResponseWriter
+	Clear()
 }
 
 type DefaultContext struct {
@@ -40,6 +41,7 @@ type DefaultContext struct {
 type PersistentStore interface {
 	Get(key string, value ContextVarObj) error
 	Set(key string, value ContextVarObj) error
+	Clear()
 }
 
 type Store struct {
@@ -96,6 +98,10 @@ func (s *Store) GetVar(key string) ContextVarObj {
 	return nil
 }
 
+func (s *Store) Clear() {
+	s.persistentStore.Clear()
+}
+
 func (s *Store) AddFunc(key string, callback ContextFuncObj[any]) int {
 	s.Funcs[key] = append(s.Funcs[key], callback)
 	return len(s.Funcs[key])
@@ -144,6 +150,10 @@ func (s *Store) AddVar(variable ContextVarObj, key string, global bool) error {
 
 	return nil
 
+}
+
+func (d *DefaultContext) Clear() {
+	d.root.Store.Clear()
 }
 
 func (d *DefaultContext) ResponseWriter() http.ResponseWriter {

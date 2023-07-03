@@ -126,6 +126,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", "text/html")
 	w.WriteHeader(ctx.StatusCode())
 	w.Write([]byte(elem.RenderElement(ctx)))
+
 }
 
 func (s *Server) Start() error {

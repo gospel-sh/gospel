@@ -9,10 +9,16 @@ import (
 )
 
 type CookieStore struct {
+	clear bool
 	InMemoryStore
 }
 
 func (i *CookieStore) Finalize(w http.ResponseWriter) {
+
+	if i.clear {
+		http.SetCookie(w, &http.Cookie{Path: "/", Name: "session-data", Value: "", Secure: false, HttpOnly: true, Expires: time.Now()})
+		return
+	}
 
 	data, err := json.Marshal(i.InMemoryStore.data)
 
@@ -23,6 +29,10 @@ func (i *CookieStore) Finalize(w http.ResponseWriter) {
 
 	encodedData := base64.StdEncoding.EncodeToString(data)
 	http.SetCookie(w, &http.Cookie{Path: "/", Name: "session-data", Value: encodedData, Secure: false, HttpOnly: true, Expires: time.Now().Add(365 * 24 * 7 * time.Hour)})
+}
+
+func (i *CookieStore) Clear() {
+	i.clear = true
 }
 
 func MakeCookieStoreRegistry() func(r *http.Request) *CookieStore {
@@ -86,10 +96,7 @@ func MakeInMemoryStore(data map[string][]byte) *InMemoryStore {
 	}
 }
 
-func (i *InMemoryStore) Finalize(w http.ResponseWriter) {
-	// we set the session cookie
-	http.SetCookie(w, &http.Cookie{Path: "/", Name: "session", Value: "foo", Secure: false, HttpOnly: true, Expires: time.Now().Add(365 * 24 * 7 * time.Hour)})
-}
+func (i *InMemoryStore) Finalize(w http.ResponseWriter) {}
 
 func (i *InMemoryStore) Get(key string, variable ContextVarObj) error {
 	if value, ok := i.data[key]; ok {
