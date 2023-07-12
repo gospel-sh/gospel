@@ -200,7 +200,13 @@ func attributes(args ...any) (attribs []*HTMLAttribute) {
 	attribs = make([]*HTMLAttribute, 0, len(args))
 
 	for _, arg := range args {
+
 		if elem, ok := arg.(*HTMLAttribute); ok {
+
+			if elem == nil {
+				continue
+			}
+
 			attribs = append(attribs, elem)
 		} else if attribList, ok := arg.([]Attribute); ok {
 			attribs = append(attribs, attributes(attribList)...)
