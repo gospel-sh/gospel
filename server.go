@@ -85,7 +85,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if err == nil {
 					etag := computeETag(fileContents)
 					w.Header().Set("ETag", etag)
-					w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+					w.Header().Set("Cache-Control", "max-age=3600, stale-while-revalidate=3600")
 				}
 			}
 		}

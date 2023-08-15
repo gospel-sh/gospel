@@ -13,42 +13,69 @@ function handleClick(e) {
         target = target.closest('a');
     }
     if (target === null) {
-        console.log("not a link");
         return;
     }
     const link = target.href;
-    console.log("Link:", link);
     e.preventDefault();
     navigateTo(link, true);
 }
 function handlePopState(_) {
-    console.log(`Going back to ${document.location.href}`);
     navigateTo(document.location.href, false);
+}
+function handleOnSubmit(e) {
+    return __awaiter(this, void 0, void 0, function* () {
+        e.preventDefault();
+        const form = e.target;
+        // we create the form data
+        const formData = new FormData(form);
+        if (e.submitter) {
+            const button = e.submitter;
+            if (button.name !== "")
+                formData.append(button.name, button.value);
+        }
+        // we need this instead of using form.action as that can be overwritten
+        // if a field named 'action' is present in the form...
+        const action = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action').get.call(form);
+        const response = yield fetch(action, {
+            body: formData,
+            method: form.method,
+        });
+        replaceDom(response.url, yield response.text(), response.redirected);
+    });
 }
 function navigateTo(link, push) {
     return __awaiter(this, void 0, void 0, function* () {
         const response = yield fetch(link);
-        const doc = new DOMParser().parseFromString(yield response.text(), "text/html");
-        document.replaceChild(doc.all[0], document.all[0]);
-        if (push) {
-            history.pushState(null, "", link);
-        }
+        replaceDom(response.url, yield response.text(), push || response.redirected);
     });
+}
+function replaceDom(link, text, push) {
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    // we capture the scroll position
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    document.replaceChild(doc.all[0], document.all[0]);
+    // we restore the scroll position
+    window.scroll(scrollX, scrollY);
+    if (push) {
+        history.pushState(null, "", link);
+    }
+    // we add the event handlers...
+    initDocument();
 }
 function addEventListeners() {
     addEventListener('click', handleClick);
     addEventListener('popstate', handlePopState);
 }
-function initGospel() {
-    console.log("initializing gospel");
+function initDocument() {
     const submittables = document.querySelectorAll("[gospel-onSubmit]");
     for (const [_, submittable] of submittables.entries()) {
         console.log("adding onSubmit handler...");
-        submittable.onsubmit = (_) => {
-            console.log("submitting...");
-            // e.preventDefault();
-        };
+        submittable.onsubmit = handleOnSubmit;
     }
+}
+function initGospel() {
+    initDocument();
     addEventListeners();
 }
 export function init() {

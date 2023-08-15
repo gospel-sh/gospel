@@ -656,6 +656,6 @@ var Track = VoidTag("track")
 var Wbr = VoidTag("wbr")
 
 // Special tags
-var Doctype = func(doctype string) *HTMLAttribute {
-	return &HTMLAttribute{Value: fmt.Sprintf("<!doctype %s>", doctype)}
+var Doctype = func(doctype string) *HTMLElement {
+	return &HTMLElement{Safe: true, Value: fmt.Sprintf("<!doctype %s>", doctype)}
 }
