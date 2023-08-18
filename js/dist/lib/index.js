@@ -15,7 +15,15 @@ function handleClick(e) {
     if (target === null) {
         return;
     }
-    const link = target.href;
+    const a = target;
+    if (a.dataset.plain !== undefined)
+        return;
+    const link = a.href;
+    if (link === "")
+        return;
+    const url = new URL(link);
+    if (url.origin !== document.location.origin)
+        return;
     e.preventDefault();
     navigateTo(link, true);
 }
@@ -35,12 +43,24 @@ function handleOnSubmit(e) {
         }
         // we need this instead of using form.action as that can be overwritten
         // if a field named 'action' is present in the form...
-        const action = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action').get.call(form);
-        const response = yield fetch(action, {
-            body: formData,
+        let action = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action').get.call(form);
+        const params = {
             method: form.method,
-        });
-        replaceDom(response.url, yield response.text(), response.redirected);
+        };
+        if (form.method == 'get') {
+            // for a get request, we convert the formData to query parameters
+            const url = new URL(action);
+            // @ts-ignore
+            url.search = (new URLSearchParams(formData)).toString();
+            action = url.toString();
+        }
+        else {
+            // for all other methods, we submit the form data in the request body
+            params["body"] = formData;
+        }
+        const response = yield fetch(action, params);
+        // we only push to history if we were redirected or if this is a 'get' form request...
+        replaceDom(response.url, yield response.text(), response.redirected || form.method == 'get');
     });
 }
 function navigateTo(link, push) {
@@ -62,16 +82,29 @@ function replaceDom(link, text, push) {
     }
     // we add the event handlers...
     initDocument();
+    // we execute scripts...
+    const scripts = document.getElementsByTagName("script");
+    for (const script of scripts) {
+        if (script.type === "" || script.type === "application/javascript") {
+            // we try to execute the script...
+            try {
+                eval(script.innerText);
+            }
+            catch (e) {
+                console.error(`Cannot execute script: ${e}`);
+            }
+        }
+    }
 }
 function addEventListeners() {
     addEventListener('click', handleClick);
     addEventListener('popstate', handlePopState);
 }
 function initDocument() {
-    const submittables = document.querySelectorAll("[gospel-onSubmit]");
-    for (const [_, submittable] of submittables.entries()) {
-        console.log("adding onSubmit handler...");
-        submittable.onsubmit = handleOnSubmit;
+    const forms = document.getElementsByTagName("form");
+    for (const form of forms) {
+        console.log(`adding onSubmit handler to ${form.id}...`);
+        form.onsubmit = handleOnSubmit;
     }
 }
 function initGospel() {

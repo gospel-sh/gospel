@@ -52,6 +52,23 @@ func Fmt(text string, args ...any) string {
 	return fmt.Sprintf(text, args...)
 }
 
+func DataAttrib(name, value string) *HTMLAttribute {
+
+	dataName := Fmt("data-%s", name)
+
+	if value == "" {
+		return &HTMLAttribute{
+			Name: dataName,
+			Value: nil,
+		}
+	}
+
+	return &HTMLAttribute{
+		Name: dataName,
+		Value: value,
+	}
+}
+
 func BooleanAttrib(tag string) func() *HTMLAttribute {
 	return func() *HTMLAttribute {
 		return &HTMLAttribute{
