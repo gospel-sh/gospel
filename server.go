@@ -90,8 +90,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		ifNoneMatch := r.Header.Get("If-None-Match")
+		eTag := r.Header.Get("ETag")
+
 		// If the ETag in the request matches the computed ETag, return 304 Not Modified
-		if r.Header.Get("If-None-Match") == w.Header().Get("ETag") {
+		if ifNoneMatch != "" && eTag != "" && ifNoneMatch == eTag {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
