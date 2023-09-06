@@ -3,6 +3,7 @@ package gospel
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type VarObj[T any] struct {
@@ -14,6 +15,7 @@ type VarObj[T any] struct {
 	persistent  bool
 	initialized bool
 	clear       bool
+	onUpdate    func()
 }
 
 func MakeVarObj[T any](context Context, generator func() T) *VarObj[T] {
@@ -22,6 +24,10 @@ func MakeVarObj[T any](context Context, generator func() T) *VarObj[T] {
 		generator: generator,
 		id:        "",
 	}
+}
+
+func (s *VarObj[T]) OnUpdate(onUpdate func()) {
+	s.onUpdate = onUpdate
 }
 
 func (s *VarObj[T]) SetCopy(copy bool) {
@@ -97,6 +103,16 @@ func (s *VarObj[T]) Initialized() bool {
 	return s.initialized
 }
 
+func (s *VarObj[T]) Context() Context {
+	return s.context
+}
+
+func (s *VarObj[T]) ScopedId() string {
+	// Returns the variable ID without the context key.
+	// If the variable is global, it will return the full ID.
+	return strings.TrimPrefix(s.id, fmt.Sprintf("%s.", s.context.Key()))
+}
+
 func (s *VarObj[T]) Set(value any) error {
 	if s.copy {
 		s.context.SetById(s.id, value)
@@ -107,6 +123,11 @@ func (s *VarObj[T]) Set(value any) error {
 		Log.Error("type error: %T vs. %T", value, *new(T))
 		return fmt.Errorf("type error")
 	}
+
+	if s.onUpdate != nil {
+		s.onUpdate()
+	}
+
 	return nil
 }
 
@@ -116,6 +137,9 @@ type ContextVarObj interface {
 	SetPersistent(bool)
 	Persistent() bool
 	Initialized() bool
+	Context() Context
+	ScopedId() string
+	OnUpdate(func())
 	SetId(string)
 	Id() string
 	SetCopy(bool)
@@ -207,6 +231,17 @@ func CachedVar[T any](c Context, value func() T) *VarObj[T] {
 
 func Var[T any](c Context, value T) *VarObj[T] {
 	return CachedVar(c, func() T { return value })
+}
+
+func NamedVar[T any](c Context, key string, v T) *VarObj[T] {
+
+	if key == "" {
+		panic("empty key")
+	}
+
+	key = fmt.Sprintf("%s.%s", c.Key(), key)
+
+	return GlobalVar[T](c, key, v)
 }
 
 func GlobalVar[T any](c Context, key string, v T) *VarObj[T] {

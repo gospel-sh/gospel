@@ -32,6 +32,13 @@ function handlePopState(_: PopStateEvent){
 	navigateTo(document.location.href, false);
 }
 
+function getFormProperty(form: HTMLFormElement, name: string): any {
+	// this is necessary as properties can be overriden by input fields, e.g.
+	// if we have an input with id 'action' or 'method', it will override the
+	// values of these form attributes...
+	return Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, name)!.get!.call(form)
+}
+
 async function handleOnSubmit(e: SubmitEvent) {
 
 	e.preventDefault();
@@ -49,15 +56,14 @@ async function handleOnSubmit(e: SubmitEvent) {
 			formData.append(button.name, button.value);
 	}
 
-	// we need this instead of using form.action as that can be overwritten
-	// if a field named 'action' is present in the form...
-	let action = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action')!.get!.call(form)
+	let action = getFormProperty(form, 'action')
+	let method = getFormProperty(form, 'method')
 
 	const params : RequestInit = {
-		method: form.method,
+		method: method,
 	}
 
-	if (form.method == 'get'){
+	if (method == 'get'){
 		// for a get request, we convert the formData to query parameters
 		const url = new URL(action);
 
@@ -73,7 +79,7 @@ async function handleOnSubmit(e: SubmitEvent) {
 	const response = await fetch(action, params)
 
 	// we only push to history if we were redirected or if this is a 'get' form request...
-	replaceDom(response.url, await response.text(), response.redirected || form.method == 'get');
+	replaceDom(response.url, await response.text(), response.redirected || method == 'get');
 
 }
 

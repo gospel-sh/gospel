@@ -24,6 +24,8 @@ type Context interface {
 	AddFunc(callback ContextFuncObj[any], key string)
 	Interactive() bool
 	ResponseWriter() http.ResponseWriter
+	Scope(string) Context
+	Key() string
 	Clear()
 }
 
@@ -213,6 +215,13 @@ func (d *DefaultContext) Element(key string, elementFunction ElementFunction) El
 
 }
 
+func (d *DefaultContext) Scope(key string) Context {
+	return &DefaultContext{
+		key:  key,
+		root: d.root,
+	}
+}
+
 func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	d.root.interactive = true
 	// interactive tree generation (i.e. call functions to modify variables)
@@ -240,8 +249,13 @@ func (d *DefaultContext) AddVar(variable ContextVarObj, key string) error {
 
 	if key == "" {
 		global = false
+		// we use the key of the current context
 		key = d.key
 	}
 
 	return d.root.Store.AddVar(variable, key, global)
+}
+
+func (d *DefaultContext) Key() string {
+	return d.key
 }

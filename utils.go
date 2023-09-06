@@ -21,3 +21,10 @@ func DoIf[T any](condition bool, value func() T) T {
 	}
 	return *new(T)
 }
+
+func Cast[T any](v any, d T) T {
+	if vt, ok := v.(T); ok {
+		return vt
+	}
+	return d
+}

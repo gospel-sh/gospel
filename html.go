@@ -58,13 +58,13 @@ func DataAttrib(name, value string) *HTMLAttribute {
 
 	if value == "" {
 		return &HTMLAttribute{
-			Name: dataName,
+			Name:  dataName,
 			Value: nil,
 		}
 	}
 
 	return &HTMLAttribute{
-		Name: dataName,
+		Name:  dataName,
 		Value: value,
 	}
 }
@@ -202,7 +202,7 @@ func children(args ...any) (chldr []*HTMLElement) {
 			}
 		} else if anyList, ok := arg.([]any); ok {
 			chldr = append(chldr, children(anyList...)...)
-		} else if elem, ok := arg.(*HTMLElement); ok {
+		} else if elem, ok := arg.(*HTMLElement); ok && elem != nil {
 			chldr = append(chldr, elem)
 		} else if str, ok := arg.(string); ok {
 			chldr = append(chldr, Literal(str))
@@ -263,10 +263,12 @@ func Selectable() HTMLElementDecorator {
 				selectedValue, ok = htmlAttrib.Value.(ContextVarObj)
 
 				if ok {
-					return []*HTMLAttribute{&HTMLAttribute{
-						Name:  "name",
-						Value: selectedValue.Id(),
-					},
+
+					return []*HTMLAttribute{
+						&HTMLAttribute{
+							Name:  "name",
+							Value: selectedValue.ScopedId(),
+						},
 						&HTMLAttribute{
 							Name:   "gospel-value",
 							Hidden: true,
@@ -312,15 +314,38 @@ func Selectable() HTMLElementDecorator {
 	}
 }
 
+func (h *HTMLElement) Attribute(name string) *HTMLAttribute {
+	for _, attribute := range h.Attributes {
+		if attribute.Name == name {
+			return attribute
+		}
+	}
+	return nil
+}
+
 func Assignable(asChild bool) HTMLElementDecorator {
 	return func(element *HTMLElement) {
 
 		assignableMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "value" {
-				v, ok := htmlAttrib.Value.(ContextVarObj)
 
-				if !ok {
+				var v ContextVarObj
+				var dv any
+				var ok bool
+
+				v, ok = htmlAttrib.Value.(ContextVarObj)
+
+				if ok {
+
+					if len(htmlAttrib.Args) == 1 {
+						// there was a default value passed in
+						dv = htmlAttrib.Args[0]
+					} else {
+						// we get the raw value instead
+						dv = v.GetRaw()
+					}
+				} else {
 					// this is a regular attribute
 					return []*HTMLAttribute{htmlAttrib}
 				}
@@ -330,7 +355,7 @@ func Assignable(asChild bool) HTMLElementDecorator {
 
 				if asChild {
 
-					strValue, ok := v.GetRaw().(string)
+					strValue, ok := dv.(string)
 
 					if !ok {
 						// to do: add a warning
@@ -341,17 +366,17 @@ func Assignable(asChild bool) HTMLElementDecorator {
 
 					return []*HTMLAttribute{htmlAttrib, &HTMLAttribute{
 						Name:  "name",
-						Value: v.Id(),
+						Value: v.ScopedId(),
 					}}
 
 				}
 
 				return []*HTMLAttribute{htmlAttrib, &HTMLAttribute{
 					Name:  "value",
-					Value: v.GetRaw(),
+					Value: dv,
 				}, &HTMLAttribute{
 					Name:  "name",
-					Value: v.Id(),
+					Value: v.ScopedId(),
 				}}
 			}
 
@@ -364,11 +389,13 @@ func Assignable(asChild bool) HTMLElementDecorator {
 }
 
 func assignVars(c Context, form map[string][]string, element *HTMLElement) {
+
 	for _, child := range element.Children {
 
 		valueMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "gospel-value" {
+
 				v, ok := htmlAttrib.Value.(ContextVarObj)
 
 				if !ok {
@@ -376,7 +403,9 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 					return nil
 				}
 
-				if values, ok := form[v.Id()]; ok && len(values) > 0 {
+				Log.Info("Assigning %s", v.ScopedId())
+
+				if values, ok := form[v.ScopedId()]; ok && len(values) > 0 {
 					value := values[0]
 					v.Set(value)
 				}
@@ -422,6 +451,15 @@ func Submittable() HTMLElementDecorator {
 	// If given, add some J Scode to ensure we call it
 	return func(element *HTMLElement) {
 
+		var formData *FormData
+		var hasFormData bool
+
+		for _, arg := range element.Args {
+			if formData, hasFormData = arg.(*FormData); hasFormData {
+				break
+			}
+		}
+
 		submitMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 			if htmlAttrib.Name == "onSubmit" {
 				f, ok := htmlAttrib.Value.(ContextFuncObj[any])
@@ -434,6 +472,7 @@ func Submittable() HTMLElementDecorator {
 
 				router := UseRouter(c)
 				req := router.Request()
+				id := Cast(element.Attribute("id"), f.Id())
 
 				if req.Method == "POST" && c.Interactive() {
 
@@ -447,7 +486,12 @@ func Submittable() HTMLElementDecorator {
 						return nil
 					}
 
-					if req.Form.Get("_gospel_id") == f.Id() {
+					if req.Form.Get("_gspl") == id {
+
+						if formData != nil {
+							// we set the form data, if it is defined
+							formData.Set(req.Form)
+						}
 
 						// we update variables based on form content
 						assignVars(c, req.Form, element)
@@ -461,11 +505,11 @@ func Submittable() HTMLElementDecorator {
 				}
 
 				// we append the ID of the form
-				element.Children = append(element.Children, Input(Type("hidden"), Name("_gospel_id"), Value(f.Id())))
+				element.Children = append(element.Children, Input(Type("hidden"), Name("_gspl"), Value(f.Id())))
 
 				return []*HTMLAttribute{&HTMLAttribute{
 					Name:  "gospel-onSubmit",
-					Value: f.Id(),
+					Value: id,
 				}}
 			}
 
@@ -631,7 +675,7 @@ var Tfoot = Tag("tfoot")
 var Th = Tag("th")
 var Thead = Tag("thead")
 var Tr = Tag("tr")
-var Button = Tag("button")
+var Button = Tag("button", Assignable(false))
 var Datalist = Tag("datalist")
 var Fieldset = Tag("fieldset")
 var Form = Tag("form", Submittable())
