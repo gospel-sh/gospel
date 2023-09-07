@@ -403,8 +403,6 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 					return nil
 				}
 
-				Log.Info("Assigning %s", v.ScopedId())
-
 				if values, ok := form[v.ScopedId()]; ok && len(values) > 0 {
 					value := values[0]
 					v.Set(value)
