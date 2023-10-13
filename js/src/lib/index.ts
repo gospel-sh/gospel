@@ -1,3 +1,5 @@
+export * as reactive from './reactive.js';
+
 function handleClick(e: Event){
 	let target = e.target;
 	if (target instanceof HTMLElement && target.tagName !== 'a'){

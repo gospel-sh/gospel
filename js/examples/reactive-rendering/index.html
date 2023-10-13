@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script src="/dist/gospel.js" type="module"></script>
+</head>
+<body>
+	<h1>Reactive Rendering</h1>
+	<p>This is an example that shows how Gospels' reactive rendering engine works.</p>
+	<hr />
+	<div id="app"></div>
+	<hr />
+	<h2>Map View</h2>
+	<div id="mapView"></div>
+	<script type="module">
+
+		const {derive, H1, Span, Literal, Attribute, Text, Mapping, List, Div, P, For, If, Li, Ul} = gospel.reactive;
+
+		const firstPart = new Literal("foo");
+		const secondPart = new Literal("bar");
+		const styleContent = new Literal("background: #efa;");
+		const showFooter = new Literal(false);
+		const footerValue = new Literal("--")
+
+		const data = new Mapping({title: "Title", description: "Description"})
+
+		window.firstPart = firstPart;
+
+		const styleTag = new Attribute("style", styleContent)
+
+		const root = document.getElementById("app");
+
+		const list = new List(["a", "b", "c", "d", "e"])
+
+		const view = Div(
+			H1(Span(Text(firstPart), styleTag), Text(secondPart), styleTag),
+			H1(Text(data.title)), // should be mapped to a literal
+			P(Text(data.description)), // should be mapped to a literal
+			Ul(
+				For(list, (item) => Li(Text(item))),
+			),
+			If(
+				showFooter,
+				P(Text("this is the footer"), Text(footerValue)),
+			),
+			If(
+				derive(() => new Literal(!showFooter.get()), [showFooter]),
+				P(Text("no footer"), Text(footerValue)),
+			),
+		)
+
+		data.description.set("this is my new description")
+
+		view.render(root);
+
+		setTimeout(() => {
+			firstPart.set("sd ")
+
+			let i = 0
+
+			setInterval(() => {
+				for(const v of list){
+					i++
+					v.set(`foobar ${i}`)
+					footerValue.set(`foo - ${i}`)
+				}
+			}, 10)
+
+			setInterval(() => showFooter.set(!showFooter.get()), 1000)
+
+			setTimeout(() => {
+				secondPart.set("barfoo")
+				setTimeout(() => {
+				styleContent.set("border: 1px solid #eee; padding: 10px; border-radius: 4px;")			
+				}, 1000)
+			}, 1000)
+
+		}, 2000)
+
+	</script>
+
+	<script type="module">
+
+		const r = gospel.reactive
+
+		const path = new r.List(["a"])
+
+		const MapView = (map, path, index) => {
+			// we first derive the key value from the path
+			const key = r.derive(() => path.get(index), [path])
+			// we then derive the mapValue
+			const mapValue = r.derive(() => map.get(key.get()),[map, key])
+			// check if the map value is a literal
+			const isLiteral = r.derive(() => new r.Literal(!(mapValue instanceof r.Mapping)), [mapValue])
+			const notIsLiteral = r.derive(() => new r.Literal(!isLiteral.get()), [isLiteral])
+
+			// return a div
+			return r.Div(
+				r.Text(key),
+				r.If(isLiteral, r.Span(r.Span(r.Text("---")), r.Text(mapValue))),
+				r.If(notIsLiteral, () => MapView(mapValue, path, index+1)),
+			)
+		}
+
+		const map = new r.Mapping({"a": "b"})
+
+		const root = document.getElementById("mapView");
+
+		const mapView = MapView(map, path, 0);
+
+		mapView.render(root);
+
+		map.get("a").set("c");
+
+	</script>
+	<input onInput="firstPart.set(event.target.value)"/>
+</body>

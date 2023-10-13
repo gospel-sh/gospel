@@ -1,98 +1,107 @@
 package css
 
 import (
-	"strings"
-
-	"github.com/gospel-dev/gospel"
+	"github.com/gospel-sh/gospel"
 )
 
-type Css struct {
-	gospel.HTMLElement
+type Ruleset interface {
+	Rule(args ...any) *Rule
 }
 
-type Context struct {
+// A stylesheet contains a number of rulesets
+type Stylesheet struct {
+	Rules []*Rule
 }
 
-func (c *Css) RenderElement(context gospel.Context) string {
-	return c.RenderChildren(context)
+func MakeStylesheet() *Stylesheet {
+	return &Stylesheet{
+		Rules: make([]*Rule, 0),
+	}
 }
 
-func mapCss(elements []*gospel.HTMLElement, c *Context) {
-	for _, element := range elements {
-		styles := []string{}
-		for _, arg := range element.Args {
-			if class, ok := arg.(*Class); ok {
-				styles = append(styles, class.Render(c))
-			}
+// Returns a link to the stylesheet as well as a route that return the styles
+func (s *Stylesheet) Link() gospel.Element {
+	return nil
+}
+
+// Returns the styles in a <style> tag
+func (s *Stylesheet) Styles() gospel.Element {
+
+	for _, rule := range s.Rules {
+		gospel.Log.Info("Got rule: %v", rule)
+	}
+
+	return nil
+}
+
+func (s *Stylesheet) Rule(args ...any) *Rule {
+	rule := &Rule{
+		Parent: s,
+		Declarations: filter[Declaration](args),
+		Subrules: filter[Rule](args),
+	}
+
+	s.Rules = append(s.Rules, rule)
+
+	return rule
+}
+
+// A Rule contains a number of declarations and potentially subrules
+type Rule struct {
+	Parent Ruleset
+	Declarations []*Declaration
+	Subrules []*Rule
+}
+
+func (r *Rule) Rule(args ...any) *Rule {
+
+	rule := &Rule{
+		Parent: r,
+		Declarations: filter[Declaration](args),
+		Subrules: filter[Rule](args),
+	}
+
+	r.Subrules = append(r.Subrules, rule)
+
+	return rule
+
+}
+
+// A declaration maps a value to a property. A value can be either a
+// literal like a string, or a variable
+type Declaration struct {
+	Property string `json:"property"`
+	Value any `json:"value"`
+}
+
+// A variable resolves to a string
+type Variable interface {
+	Value() string
+}
+
+// helpers
+
+func filter[T any](args []any) []*T {
+	ts := make([]*T, 0, len(args))
+
+	for _, arg := range args {
+		if va, ok := arg.(*T); ok {
+			ts = append(ts, va)
 		}
-
-		if len(styles) > 0 {
-
-			stylesStr := strings.Join(styles, " ")
-
-			element.Attributes = append(element.Attributes, gospel.Style(stylesStr))
-
-		}
-	}
-}
-
-func CSS(children ...*gospel.HTMLElement) gospel.Element {
-
-	c := &Context{}
-
-	mapCss(children, c)
-
-	return &Css{
-		HTMLElement: gospel.HTMLElement{
-			Children: children,
-		},
-	}
-}
-
-type ContextValue interface {
-	Get(*Context) any
-}
-
-func (c *Class) Render(context *Context) string {
-	// we render the CSS class or style attribute
-
-	v := c.Value
-
-	if vr, ok := v.(ContextValue); ok {
-		v = vr.Get(context)
 	}
 
-	return gospel.Fmt("%s: %v;", c.Property, v)
+	return ts
 }
 
-type Class struct {
-	Property string
-	Value    any
-}
+// Declarations
 
-func Prop(property string) func(value any) *Class {
-	return func(value any) *Class {
-		return &Class{
+func dec(property string) func(value any) *Declaration {
+	return func(value any) *Declaration {
+		return &Declaration{
 			Property: property,
-			Value:    value,
+			Value: value,
 		}
 	}
 }
 
-// Flexbox
-
-var Flex = Prop("display")("flex")
-var FlexDirection = Prop("flex-direction")
-var AlignItems = Prop("align-items")
-var JustifyContent = Prop("justify-content")
-
-// Line height
-
-var LineHeight = Prop("line-height")
-
-// Geometry
-
-var Width = Prop("width")
-var Height = Prop("height")
-var MaxWidth = Prop("max-width")
-var MinWidth = Prop("min-width")
+var BorderRadius = dec("border-radius")

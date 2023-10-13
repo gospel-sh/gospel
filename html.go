@@ -23,7 +23,7 @@ type HTMLElement struct {
 	Void       bool
 	Value      any
 	Safe       bool
-	Children   []*HTMLElement
+	Children   []any
 	Attributes []*HTMLAttribute
 	Args       []any
 }
@@ -167,7 +167,27 @@ func (h *HTMLElement) RenderChildren(c Context) string {
 			continue
 		}
 
-		renderedChildren += child.RenderElement(c)
+		htmlChild, ok := child.(*HTMLElement)
+
+		if !ok {
+
+			htmlFuncChild, ok := child.(PureElementFunction)
+
+			if ok {
+
+				htmlChild, ok = htmlFuncChild().(*HTMLElement)
+
+				if !ok {
+					continue
+				}
+			} else {
+				continue
+			}
+
+		}
+
+
+		renderedChildren += htmlChild.RenderElement(c)
 	}
 
 	return renderedChildren
@@ -187,9 +207,9 @@ func Literal(value string) *HTMLElement {
 	}
 }
 
-func children(args ...any) (chldr []*HTMLElement) {
+func children(args ...any) (chldr []any) {
 
-	chldr = make([]*HTMLElement, 0, len(args))
+	chldr = make([]any, 0, len(args))
 
 	for _, arg := range args {
 		if elementList, ok := arg.([]Element); ok {
@@ -206,6 +226,8 @@ func children(args ...any) (chldr []*HTMLElement) {
 			chldr = append(chldr, elem)
 		} else if str, ok := arg.(string); ok {
 			chldr = append(chldr, Literal(str))
+		} else if _, ok := arg.(PureElementFunction); ok {
+			chldr = append(chldr, arg)
 		}
 	}
 
@@ -293,13 +315,19 @@ func Selectable() HTMLElementDecorator {
 
 		for _, child := range element.Children {
 
-			if child.Tag != "option" {
+			htmlChild, ok := child.(*HTMLElement)
+
+			if !ok {
+				continue
+			}
+
+			if htmlChild.Tag != "option" {
 				continue
 			}
 
 			var value any
 
-			for _, attrib := range child.Attributes {
+			for _, attrib := range htmlChild.Attributes {
 
 				if attrib.Name == "value" {
 					value = attrib.Value
@@ -308,7 +336,7 @@ func Selectable() HTMLElementDecorator {
 			}
 
 			if value == selectedValue.GetRaw() {
-				child.Attributes = append(child.Attributes, BooleanAttrib("selected")())
+				htmlChild.Attributes = append(htmlChild.Attributes, BooleanAttrib("selected")())
 			}
 		}
 	}
@@ -392,6 +420,12 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 
 	for _, child := range element.Children {
 
+		htmlChild, ok := child.(*HTMLElement)
+
+		if !ok {
+			continue
+		}
+
 		valueMapper := func(htmlAttrib *HTMLAttribute) []*HTMLAttribute {
 
 			if htmlAttrib.Name == "gospel-value" {
@@ -412,10 +446,10 @@ func assignVars(c Context, form map[string][]string, element *HTMLElement) {
 			return nil
 		}
 
-		mapHTMLAttributes(child.Attributes, valueMapper)
+		mapHTMLAttributes(htmlChild.Attributes, valueMapper)
 
 		// we recurse into child elements...
-		assignVars(c, form, child)
+		assignVars(c, form, htmlChild)
 
 	}
 }
@@ -546,8 +580,15 @@ func makeTag(tag string, args []any, void bool, decorators []HTMLElementDecorato
 // Marks children of a script node as safe so that we don't escape special characters...
 func isScript(element *HTMLElement) {
 	for _, child := range element.Children {
-		if child.Value != "" {
-			child.Safe = true
+
+		htmlChild, ok := child.(*HTMLElement)
+
+		if !ok {
+			continue
+		}
+
+		if htmlChild.Value != "" {
+			htmlChild.Safe = true
 		}
 	}
 }
@@ -694,6 +735,10 @@ var Select = Tag("select", Selectable())
 
 // Safe values
 var Nbsp = SafeLiteral("&nbsp;")
+var Gt = SafeLiteral("&gt;")
+var L = func(literal string) *HTMLElement {
+	return SafeLiteral(literal)
+}
 
 // HTML Void Tags
 

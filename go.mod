@@ -1,3 +1,3 @@
-module github.com/gospel-dev/gospel
+module github.com/gospel-sh/gospel
 
 go 1.20

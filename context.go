@@ -6,6 +6,7 @@ import (
 )
 
 type ElementFunction func(c Context) Element
+type PureElementFunction func() Element
 type RespondWithFunction func(c Context, w http.ResponseWriter)
 
 type Context interface {
@@ -14,6 +15,7 @@ type Context interface {
 	SetRespondWith(RespondWithFunction)
 	RespondWith() RespondWithFunction
 	ElementFunction(string, ElementFunction) ElementFunction
+	DeferElement(string, ElementFunction) PureElementFunction
 	Element(string, ElementFunction) Element
 	GetVar(key string) ContextVarObj
 	SetById(id string, value any) error
@@ -202,6 +204,19 @@ func (d *DefaultContext) ElementFunction(key string, elementFunction ElementFunc
 
 }
 
+func (d *DefaultContext) DeferElement(key string, elementFunction ElementFunction) PureElementFunction {
+
+	c := &DefaultContext{
+		key:  fmt.Sprintf("%s.%s", d.key, key),
+		root: d.root,
+	}
+
+	return func() Element {
+		return elementFunction(c)
+	}
+
+}
+
 func (d *DefaultContext) Element(key string, elementFunction ElementFunction) Element {
 
 	c := &DefaultContext{
@@ -209,9 +224,7 @@ func (d *DefaultContext) Element(key string, elementFunction ElementFunction) El
 		root: d.root,
 	}
 
-	element := elementFunction(c)
-
-	return element
+	return elementFunction(c)
 
 }
 
