@@ -186,7 +186,6 @@ func (h *HTMLElement) RenderChildren(c Context) string {
 
 		}
 
-
 		renderedChildren += htmlChild.RenderElement(c)
 	}
 

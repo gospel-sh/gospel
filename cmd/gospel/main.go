@@ -1,14 +1,13 @@
 package main
 
 import (
-	"io/fs"
 	"embed"
-	"os"
-	"os/signal"
 	. "github.com/gospel-sh/gospel"
 	"github.com/gospel-sh/gospel/examples"
+	"io/fs"
+	"os"
+	"os/signal"
 )
-
 
 //go:embed static
 var StaticFiles embed.FS
@@ -47,9 +46,7 @@ func makeExamples() *Server {
 			),
 		)
 
-
 	}
-
 
 	return MakeServer(&App{
 		Root:         root,
@@ -58,7 +55,7 @@ func makeExamples() *Server {
 	})
 }
 
-func main(){
+func main() {
 	examplesServer := makeExamples()
 	examplesServer.Start()
 
@@ -68,10 +65,9 @@ func main(){
 	signal.Notify(c, os.Interrupt)
 
 	// we wait for an interrupt...
-	<- c
+	<-c
 
 	Log.Info("Stopping server...")
-
 
 	examplesServer.Stop()
 
