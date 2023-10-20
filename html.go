@@ -629,6 +629,9 @@ var As = Attrib("as")
 var Enctype = Attrib("enctype")
 var Placeholder = Attrib("placeholder")
 var Defer = BooleanAttrib("defer")
+var Aria = func(tag string, value any, args ...any) *HTMLAttribute {
+	return Attrib(tag)(value, args...)
+}
 
 // HTML Tags
 // https://www.w3.org/TR/2011/WD-html-markup-20110113/syntax.html
