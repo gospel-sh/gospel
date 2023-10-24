@@ -2,6 +2,7 @@ package gospel
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -32,15 +33,35 @@ func (s *Stylesheet) Styles() Element {
 	)
 }
 
-func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
-
+func subrules(parent Ruleset, args []any) []*Rule {
+	// we filter out rules directly
 	subrules := filter[Rule](args)
 
 	// we convert HTML elements into tag rules
 	elements := filter[HTMLElement](args)
+
 	for _, element := range elements {
 		subrules = append(subrules, MakeRule(parent, &TagSelector{element.Tag}, element.Args...))
 	}
+
+	attributes := filter[HTMLAttribute](args)
+	for _, attribute := range attributes {
+		if attribute.Name == "class" {
+			strValue, ok := attribute.Value.(string)
+			if !ok {
+				// to do: properly handle this
+				continue
+			}
+			subrules = append(subrules, MakeRule(parent, &ClassSelector{ClassName: strValue, Source: attribute}, attribute.Args...))
+		}
+	}
+
+	return subrules
+}
+
+func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
+
+	subrules := subrules(parent, args)
 
 	rule := &Rule{
 		Parent:       parent,
@@ -57,25 +78,53 @@ func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
 
 }
 
-func (s *Stylesheet) Rule(args ...any) *Rule {
-	className := fmt.Sprintf("cls-%d", s.classIndex)
+func (s *Stylesheet) Fragment(args ...any) *Rule {
+	className := fmt.Sprintf("gospel-%d", s.classIndex)
 	s.classIndex++
 
-	return s.NamedRule(className, args...)
+	return s.NamedFragment(className, args...)
+}
+
+func (s *Stylesheet) NamedFragment(name string, args ...any) *Rule {
+	rule := MakeRule(s, &ClassSelector{ClassName: name}, args...)
+	return rule
+
+}
+
+func (s *Stylesheet) Rule(args ...any) *Rule {
+	rule := s.Fragment(args...)
+	s.Rules = append(s.Rules, rule)
+	return rule
 }
 
 func (s *Stylesheet) NamedRule(name string, args ...any) *Rule {
-	rule := MakeRule(s, &ClassSelector{ClassName: name}, args...)
+	rule := s.NamedFragment(name, args...)
 	s.Rules = append(s.Rules, rule)
 	return rule
 }
 
 func (s *Stylesheet) String() string {
-	flatRules := Flatten(s.Rules, nil, nil)
+
+	filteredRules := make([]*Rule, 0, len(s.Rules))
+
+	for _, rule := range s.Rules {
+		if rule.Parent != s {
+			continue
+		}
+		filteredRules = append(filteredRules, rule)
+	}
+
+	flatRules := Flatten(filteredRules, nil, nil)
 
 	css := ""
 
 	for _, flatRule := range flatRules {
+
+		if len(flatRule.Declarations) == 0 {
+			// this rule is empty
+			continue
+		}
+
 		css += flatRule.String() + "\n"
 	}
 
@@ -129,6 +178,7 @@ type Selector interface {
 
 type ClassSelector struct {
 	ClassName string
+	Source    *HTMLAttribute
 }
 
 func (s *ClassSelector) String() string {
@@ -140,7 +190,7 @@ type TagSelector struct {
 }
 
 func (s *TagSelector) String() string {
-	return fmt.Sprintf("%s", s.TagName)
+	return fmt.Sprintf(" %s", s.TagName)
 }
 
 type MediaQuery struct {
@@ -176,6 +226,32 @@ func indent(s string, n int) string {
 	return indented
 }
 
+func deduplicateDeclarations(declarations []*Declaration) []*Declaration {
+	dm := map[string]*Declaration{}
+	keys := make([]string, 0, len(declarations))
+
+	for _, declaration := range declarations {
+
+		if _, ok := dm[declaration.Property]; !ok {
+			keys = append(keys, declaration.Property)
+		}
+
+		// we store the declaration in the map
+		// the last declaration in the list wins
+		dm[declaration.Property] = declaration
+	}
+
+	// we sort the declarations by property name and return them
+	dd := make([]*Declaration, 0, len(declarations))
+	sort.Strings(keys)
+
+	for _, v := range keys {
+		dd = append(dd, dm[v])
+	}
+
+	return dd
+}
+
 func (f *FlatRule) String() string {
 	var selectors, mediaQueries, declarations []string
 
@@ -187,11 +263,11 @@ func (f *FlatRule) String() string {
 		selectors = append(selectors, selector.String())
 	}
 
-	for _, declaration := range f.Declarations {
+	for _, declaration := range deduplicateDeclarations(f.Declarations) {
 		declarations = append(declarations, declaration.String())
 	}
 
-	rule := fmt.Sprintf("%s {\n%s}\n", strings.Join(selectors, " "), indent(strings.Join(declarations, "\n"), 2))
+	rule := fmt.Sprintf("%s {\n%s}\n", strings.Trim(strings.Join(selectors, ""), " "), indent(strings.Join(declarations, "\n"), 2))
 
 	if len(mediaQueries) > 0 {
 		return fmt.Sprintf("@media %s {\n%s}\n", strings.Join(mediaQueries, " and "), indent(rule, 2))
@@ -222,16 +298,32 @@ func (r *Rule) Class() string {
 	return classSelector.ClassName
 }
 
+func (r *Rule) Derive(args ...any) *Rule {
+
+	declarations := make([]*Declaration, len(r.Declarations))
+	copy(declarations, r.Declarations)
+
+	subrules := make([]*Rule, len(r.Subrules))
+	copy(subrules, r.Subrules)
+
+	// we make a copy of the current rule
+	nr := &Rule{
+		Parent:       r.Parent,
+		Selector:     r.Selector,
+		MediaQuery:   r.MediaQuery,
+		Declarations: declarations,
+		Subrules:     subrules,
+	}
+
+	// we extend the rule with the args
+	nr.Extend(args...)
+	return nr
+
+}
+
 func (r *Rule) Extend(args ...any) {
 
-	subrules := filter[Rule](args)
-
-	// we convert HTML elements into tag rules
-	elements := filter[HTMLElement](args)
-
-	for _, element := range elements {
-		subrules = append(subrules, MakeRule(r, &TagSelector{element.Tag}, element.Args...))
-	}
+	subrules := subrules(r, args)
 
 	for _, subrule := range subrules {
 		subrule.Parent = r
@@ -297,26 +389,127 @@ func TagRule(tagName string) func(args ...any) *Rule {
 	}
 }
 
+// Text Decoration
+
+var TextDecoration = dec("text-decoration")
+
 // Colors
 var Color = dec("color")
+
+// Background
+var Background = dec("background")
+var BackgroundColor = dec("background-color")
 
 // Borders
 var BorderRadius = dec("border-radius")
 var BorderWidth = dec("border-width")
 var BorderStyle = dec("border-style")
 var BorderColor = dec("border-color")
+var Border = dec("border")
 
 // Padding
 var Padding = dec("padding")
 
-// Sizes
+// Margin
+var Margin = dec("margin")
 
-func Px(value float64) *Size {
-	return &Size{
-		"px",
-		value,
+// Transform
+var Transform = dec("transform")
+var TransformOrigin = dec("transform-origin")
+
+// Dimensions
+
+var Width = dec("width")
+var Height = dec("height")
+
+// Positioning
+
+var Position = dec("position")
+var Left = dec("left")
+var Top = dec("top")
+
+// Functions
+
+type CSSFunc struct {
+	Name string
+	Args []any
+}
+
+func (c *CSSFunc) String() string {
+
+	strArgs := make([]string, len(c.Args))
+
+	for i, arg := range c.Args {
+		strArgs[i] = fmt.Sprintf("%v", arg)
+	}
+
+	return fmt.Sprintf("%s(%s)", c.Name, strings.Join(strArgs, ", "))
+}
+
+func fnc(name string) func(args ...any) *CSSFunc {
+	return func(args ...any) *CSSFunc {
+		return &CSSFunc{
+			Name: name,
+			Args: args,
+		}
 	}
 }
+
+type Op struct {
+	Op   string
+	Args []any
+}
+
+func (o *Op) String() string {
+
+	strArgs := make([]string, len(o.Args))
+
+	for i, arg := range o.Args {
+		strArgs[i] = fmt.Sprintf("%v", arg)
+	}
+
+	return strings.Join(strArgs, " "+o.Op+" ")
+
+}
+
+func op(name string) func(args ...any) *Op {
+	return func(args ...any) *Op {
+		return &Op{
+			Op:   name,
+			Args: args,
+		}
+	}
+}
+
+// Operators
+
+var Add = op("+")
+var Sub = op("-")
+var Mul = op("*")
+var Dir = op("/")
+
+// Calc
+
+var Calc = fnc("calc")
+var Scale = fnc("scale")
+
+// Sizes
+
+func size(name string) func(value float64) *Size {
+	return func(value float64) *Size {
+		return &Size{
+			name,
+			value,
+		}
+	}
+}
+
+var Px = size("px")
+var Percent = size("%")
+var Em = size("em")
+var Rem = size("rem")
+var Vh = size("vh")
+var Vw = size("vw")
 
 func (p *Size) String() string {
 	return fmt.Sprintf("%v%s", p.Value, p.Unit)
@@ -341,17 +534,27 @@ func Mobile(args ...any) *Rule {
 
 // Helper functions
 
-func Styles(rules ...*Rule) []any {
+func Styles(args ...any) []any {
 	classes := make([]string, 0)
 
-	for _, rule := range rules {
-		if className := rule.Class(); className == "" {
-			// to do: handle this
-			continue
-		} else {
-			classes = append(classes, className)
+	for _, arg := range args {
+
+		switch vt := arg.(type) {
+		case *Rule:
+			if className := vt.Class(); className == "" {
+				// to do: handle this
+				continue
+			} else {
+				classes = append(classes, className)
+			}
+
 		}
+
 	}
 
 	return []any{Class(strings.Join(classes, " "))}
 }
+
+// Any selector
+
+var Any = Tag("*")
