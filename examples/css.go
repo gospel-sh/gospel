@@ -5,136 +5,47 @@ import (
 	"strings"
 )
 
-var CSS = MakeStylesheet()
+var CSS = MakeStylesheet("site")
 
-var BR4 = CSS.NamedRule("br-4", BorderRadius(Px(4)))
-
-var IsError = CSS.NamedFragment(
-	"is-error",
-	BackgroundColor("#f00"),
-)
-
-var IsSuccess = CSS.NamedFragment(
-	"is-success",
-	BackgroundColor("#0f0"),
-)
-
-var ButtonStyle = CSS.NamedRule(
-	"button",
-	IsSuccess.Derive(
-		Span(
-			TextDecoration("underline"),
-		),
-	),
-	IsError.Derive(Span(BorderRadius("4px"))),
-)
-
-var MessageStyle = CSS.NamedRule(
-	"message",
-	IsSuccess.Derive(
-		BackgroundColor("#afe"),
-		P(
-			TextDecoration("underline"),
-		),
-	),
-)
-
-var Rounded = CSS.NamedRule(
-	"rounded",
-	BorderRadius(Px(4)),
-	BorderColor("grey"),
-	BorderStyle("solid"),
-	BorderWidth(Px(2)),
-	Padding(Px(10)),
-	// mobile view
-	Mobile(
-		BorderRadius(Px(8)),
-		Padding(Px(5)),
-	),
-	Span(
-		Padding(Px(10)),
-		Color("blue"),
-		// applies to any a element within
-		A(
-			Color("red"),
-			Mobile(
-				Padding(Px(10)),
-			),
-		),
-	),
-)
-
-var Scaling = 1.0
-
-var Scaled = CSS.Rule(
-	Width("400px"),
-	Height("400px"),
-	Position("relative"),
-	Border("4px solid #eee"),
-	Padding(Px(10)),
-	Iframe(
-		Width(Calc(Sub(Percent(100/Scaling), Px(14)))),
-		Height(Calc(Sub(Percent(100/Scaling), Px(14)))),
-		Position("absolute"),
-		Transform(Scale(Scaling)),
-		TransformOrigin("top left"),
-	),
-)
-
-func ButtonsExample(c Context) Element {
-	return Button(
-		Styles(ButtonStyle, IsSuccess),
-		Span("foo"),
-	)
+func init() {
+	// general style reset
+	CSS.AddRule(TagRule("*")(
+		FontWeight("lighter"),
+		Border(0),
+		Padding(0),
+		Margin(0),
+	))
 }
 
-func NavbarExample(c Context) Element {
-	return F(
-		c.DeferElement("styles", func(c Context) Element { return CSS.Styles() }),
-		Div(
-			Styles(BR4, Rounded),
-			"this is a rounded div",
-			Span("this should be blue", A("and this red")),
-		),
-	)
-}
-
-func SidebarExample(c Context) Element {
-	return F(
-		c.DeferElement("styles", func(c Context) Element { return CSS.Styles() }),
-		Div(
-			Styles(BR4, Rounded),
-			"this is a sidebar",
-			Span("this should be blue", A("and this red")),
-		),
-	)
-}
+var Scaling = 0.7
 
 type Example struct {
 	Name string
 	View func(c Context) Element
+	CSS  *Stylesheet
 }
 
-var Examples = []Example{
-	{
-		"Buttons",
-		ButtonsExample,
-	},
-	{
-		"Navbar",
-		NavbarExample,
-	},
-	{
-		"Sidebar",
-		SidebarExample,
-	},
-}
+var Examples = []Example{}
 
 func iframe(url string) Element {
 	return F(
 		H1(url),
 		Div(
-			Styles(Scaled),
+			Styles(
+				Height("700px"),
+				Position("relative"),
+				Border("4px solid #eee"),
+				Iframe(
+					Width(Percent(100/Scaling)),
+					Height(Percent(100/Scaling)),
+					Position("absolute"),
+					Transform(Scale(Scaling)),
+					TransformOrigin("top left"),
+					Border("none"),
+					Margin(0),
+					Padding(0),
+				),
+			),
 			Iframe(
 				Src(url),
 			),
@@ -152,9 +63,21 @@ func CSSExample(c Context) Element {
 	iframes := []any{}
 
 	for _, exampleConfig := range Examples {
-		url := Fmt("/%s", strings.ToLower(exampleConfig.Name))
-		routes = append(routes, Route(url, exampleConfig.View))
-		iframes = append(iframes, iframe(Fmt("/css%s", url)))
+
+		func(config Example) {
+
+			url := Fmt("/%s", strings.ToLower(config.Name))
+
+			routes = append(routes, Route(url, func(c Context) Element {
+				return F(
+					config.CSS.Styles(),
+					config.View(c),
+				)
+			}))
+			iframes = append(iframes, iframe(Fmt("/css%s", url)))
+
+		}(exampleConfig)
+
 	}
 
 	routes = append(routes, Route("",
@@ -165,10 +88,13 @@ func CSSExample(c Context) Element {
 	)
 
 	return F(
-		c.DeferElement("styles", func(c Context) Element { return CSS.Styles() }),
-		router.Match(
-			c,
-			routes...,
+		CSS.Styles(),
+		Styled(
+			"root",
+			router.Match(
+				c,
+				routes...,
+			),
 		),
 	)
 }

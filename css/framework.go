@@ -20,7 +20,8 @@ type Borders struct{}
 type Padding struct{}
 
 func MakeCSS(config Config) *gospel.Stylesheet {
-	css := gospel.MakeStylesheet()
+
+	css := gospel.MakeStylesheet("gospel")
 
 	MakeBorders(config.Borders, css)
 

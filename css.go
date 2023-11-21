@@ -11,14 +11,43 @@ type Ruleset interface{}
 // A stylesheet contains a number of rulesets
 type Stylesheet struct {
 	classIndex int
+	Name       string
 	Rules      []*Rule
 }
 
-func MakeStylesheet() *Stylesheet {
+func MakeStylesheet(name string, rules ...*Rule) *Stylesheet {
 	return &Stylesheet{
-		Rules:      make([]*Rule, 0),
+		Name:       name,
+		Rules:      rules,
 		classIndex: 1,
 	}
+}
+
+func Styled(name string, element Element) Element {
+
+	css := MakeStylesheet(name)
+
+	addStyles := func(styles *StylesStruct, element *HTMLElement) {
+		classNames := make([]string, 0)
+		for _, rule := range styles.Rules {
+			if rule.Selector == nil {
+				// we add a selector to the rule
+				rule.Selector = css.ClassSelector()
+			}
+			css.AddRule(rule)
+			// we add the rule class to the class names
+			classNames = append(classNames, rule.Class())
+		}
+		element.Attributes = append(element.Attributes, Class(strings.Join(classNames, " ")))
+	}
+
+	// we add all rules to the stylesheet
+	Walk(element, addStyles)
+
+	return F(
+		css.Styles(),
+		element,
+	)
 }
 
 // Returns a link to the stylesheet as well as a route that return the styles
@@ -28,8 +57,15 @@ func (s *Stylesheet) Link() Element {
 
 // Returns the styles in a <style> tag
 func (s *Stylesheet) Styles() Element {
+
+	ss := s.String()
+
+	if ss == "" {
+		return nil
+	}
+
 	return StyleTag(
-		L(s.String()),
+		L(ss),
 	)
 }
 
@@ -78,10 +114,15 @@ func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
 
 }
 
-func (s *Stylesheet) Fragment(args ...any) *Rule {
-	className := fmt.Sprintf("gospel-%d", s.classIndex)
+func (s *Stylesheet) ClassSelector() *ClassSelector {
+	className := fmt.Sprintf("%s-%d", s.Name, s.classIndex)
 	s.classIndex++
+	return &ClassSelector{ClassName: className}
+}
 
+func (s *Stylesheet) Fragment(args ...any) *Rule {
+	className := fmt.Sprintf("%s-%d", s.Name, s.classIndex)
+	s.classIndex++
 	return s.NamedFragment(className, args...)
 }
 
@@ -89,6 +130,25 @@ func (s *Stylesheet) NamedFragment(name string, args ...any) *Rule {
 	rule := MakeRule(s, &ClassSelector{ClassName: name}, args...)
 	return rule
 
+}
+
+func (s *Stylesheet) AddRule(rule *Rule) {
+	// we check if the rule already is in the stylesheet
+	for _, existingRule := range s.Rules {
+		if existingRule == rule {
+			return
+		}
+	}
+
+	rule.Parent = s
+	s.Rules = append(s.Rules, rule)
+}
+
+func (s *Stylesheet) AddStylesheet(stylesheet *Stylesheet) {
+	for _, rule := range stylesheet.Rules {
+		rule.Parent = s
+		s.Rules = append(s.Rules, rule)
+	}
 }
 
 func (s *Stylesheet) Rule(args ...any) *Rule {
@@ -105,16 +165,7 @@ func (s *Stylesheet) NamedRule(name string, args ...any) *Rule {
 
 func (s *Stylesheet) String() string {
 
-	filteredRules := make([]*Rule, 0, len(s.Rules))
-
-	for _, rule := range s.Rules {
-		if rule.Parent != s {
-			continue
-		}
-		filteredRules = append(filteredRules, rule)
-	}
-
-	flatRules := Flatten(filteredRules, nil, nil)
+	flatRules := Flatten(s.Rules, nil, nil)
 
 	css := ""
 
@@ -147,9 +198,9 @@ func Flatten(rules []*Rule, selectors []Selector, mediaQueries []*MediaQuery) []
 			ruleSelectors = append(ruleSelectors, rule.Selector)
 		}
 
-		if rule.MediaQuery != nil {
+		if rule.MediaQueries != nil {
 			// we append the rule media query (if it exists) to the existing ones
-			ruleMediaQueries = append(ruleMediaQueries, rule.MediaQuery)
+			ruleMediaQueries = append(ruleMediaQueries, rule.MediaQueries...)
 		}
 
 		flatRule := &FlatRule{
@@ -183,6 +234,21 @@ type ClassSelector struct {
 
 func (s *ClassSelector) String() string {
 	return fmt.Sprintf(".%s", s.ClassName)
+}
+
+type PseudoClassSelector struct {
+	Type          string
+	Args          []any
+	ArgsFormatter func(args []any) string
+}
+
+func (s *PseudoClassSelector) String() string {
+
+	if s.ArgsFormatter != nil {
+		return fmt.Sprintf(":%s(%s)", s.Type, s.ArgsFormatter(s.Args))
+	}
+
+	return fmt.Sprintf(":%s", s.Type)
 }
 
 type TagSelector struct {
@@ -280,7 +346,7 @@ func (f *FlatRule) String() string {
 type Rule struct {
 	Parent       Ruleset
 	Selector     Selector
-	MediaQuery   *MediaQuery
+	MediaQueries []*MediaQuery
 	Declarations []*Declaration
 	Subrules     []*Rule
 }
@@ -290,8 +356,6 @@ func (r *Rule) Class() string {
 	classSelector, ok := r.Selector.(*ClassSelector)
 
 	if !ok {
-		// to do: better error handling
-		Log.Warning("Not a class-based rule")
 		return ""
 	}
 
@@ -306,11 +370,14 @@ func (r *Rule) Derive(args ...any) *Rule {
 	subrules := make([]*Rule, len(r.Subrules))
 	copy(subrules, r.Subrules)
 
+	mediaQueries := make([]*MediaQuery, len(r.MediaQueries))
+	copy(mediaQueries, r.MediaQueries)
+
 	// we make a copy of the current rule
 	nr := &Rule{
 		Parent:       r.Parent,
 		Selector:     r.Selector,
-		MediaQuery:   r.MediaQuery,
+		MediaQueries: mediaQueries,
 		Declarations: declarations,
 		Subrules:     subrules,
 	}
@@ -356,6 +423,34 @@ type Size struct {
 	Value float64
 }
 
+func (s *Size) Sub(value float64) *Size {
+	return &Size{
+		Unit:  s.Unit,
+		Value: s.Value - value,
+	}
+}
+
+func (s *Size) Add(value float64) *Size {
+	return &Size{
+		Unit:  s.Unit,
+		Value: s.Value + value,
+	}
+}
+
+func (s *Size) Mul(value float64) *Size {
+	return &Size{
+		Unit:  s.Unit,
+		Value: s.Value * value,
+	}
+}
+
+func (s *Size) Div(value float64) *Size {
+	return &Size{
+		Unit:  s.Unit,
+		Value: s.Value / value,
+	}
+}
+
 // helpers
 
 func filter[T any](args []any) []*T {
@@ -381,6 +476,12 @@ func dec(property string) func(value any) *Declaration {
 	}
 }
 
+// Class Rule
+
+func ClassRule(className string, args ...any) *Rule {
+	return MakeRule(nil, &ClassSelector{ClassName: className}, args...)
+}
+
 // Tags
 
 func TagRule(tagName string) func(args ...any) *Rule {
@@ -388,45 +489,6 @@ func TagRule(tagName string) func(args ...any) *Rule {
 		return MakeRule(nil, &TagSelector{tagName}, args...)
 	}
 }
-
-// Text Decoration
-
-var TextDecoration = dec("text-decoration")
-
-// Colors
-var Color = dec("color")
-
-// Background
-var Background = dec("background")
-var BackgroundColor = dec("background-color")
-
-// Borders
-var BorderRadius = dec("border-radius")
-var BorderWidth = dec("border-width")
-var BorderStyle = dec("border-style")
-var BorderColor = dec("border-color")
-var Border = dec("border")
-
-// Padding
-var Padding = dec("padding")
-
-// Margin
-var Margin = dec("margin")
-
-// Transform
-var Transform = dec("transform")
-var TransformOrigin = dec("transform-origin")
-
-// Dimensions
-
-var Width = dec("width")
-var Height = dec("height")
-
-// Positioning
-
-var Position = dec("position")
-var Left = dec("left")
-var Top = dec("top")
 
 // Functions
 
@@ -486,7 +548,7 @@ func op(name string) func(args ...any) *Op {
 var Add = op("+")
 var Sub = op("-")
 var Mul = op("*")
-var Dir = op("/")
+var Division = op("/")
 
 // Calc
 
@@ -518,43 +580,200 @@ func (p *Size) String() string {
 // Media Queries
 
 var MobileWidth = Px(600)
+var TabletWidth = Px(1024)
+var DesktopWidth = Px(1280)
 
-// Returns a new rule with a media query for the mobile width
-func Mobile(args ...any) *Rule {
-	// we create a rule with the given arguments
-	rule := MakeRule(nil, nil, args...)
-	// we add the media query to the rule
-	rule.MediaQuery = &MediaQuery{
-		"max-width",
-		MobileWidth,
+func MakeMediaQuery(name string, arg any) *MediaQuery {
+	return &MediaQuery{
+		name, arg,
 	}
-
-	return rule
 }
+
+func mediaQueryRule(queries []*MediaQuery) func(args ...any) *Rule {
+	return func(args ...any) *Rule {
+		// we create a rule with the given arguments
+		rule := MakeRule(nil, nil, args...)
+		rule.MediaQueries = append(rule.MediaQueries, queries...)
+		return rule
+	}
+}
+
+var Mobile = mediaQueryRule([]*MediaQuery{MakeMediaQuery("max-width", MobileWidth)})
+var Tablet = mediaQueryRule([]*MediaQuery{MakeMediaQuery("min-width", TabletWidth), MakeMediaQuery("max-width", DesktopWidth.Sub(1))})
+var Desktop = mediaQueryRule([]*MediaQuery{MakeMediaQuery("min-width", DesktopWidth)})
 
 // Helper functions
 
-func Styles(args ...any) []any {
-	classes := make([]string, 0)
+type StylesStruct struct {
+	Rules []*Rule
+}
 
+// Convert a list of styles into a list of classes
+func Styles(args ...any) *StylesStruct {
+	rules := make([]*Rule, 0)
+	ruleArgs := make([]any, 0)
 	for _, arg := range args {
 
 		switch vt := arg.(type) {
 		case *Rule:
 			if className := vt.Class(); className == "" {
-				// to do: handle this
-				continue
+				// we append the rule to the rule args
+				ruleArgs = append(ruleArgs, vt)
 			} else {
-				classes = append(classes, className)
+				// this is a class rule, we can directly inclcude
+				rules = append(rules, vt)
 			}
-
+		case *HTMLElement:
+			ruleArgs = append(ruleArgs, vt)
+		case *Declaration:
+			ruleArgs = append(ruleArgs, vt)
 		}
-
 	}
 
-	return []any{Class(strings.Join(classes, " "))}
+	if len(ruleArgs) > 0 {
+		rules = append(rules, MakeRule(nil, nil, ruleArgs...))
+	}
+
+	return &StylesStruct{
+		Rules: rules,
+	}
 }
 
 // Any selector
 
 var Any = Tag("*")
+
+// Pseudo classes
+
+func pseudoArgs(typeName string, formatter func(args []any) string) func(args ...any) func(args ...any) *Rule {
+	return func(pseudoArgs ...any) func(args ...any) *Rule {
+		return func(args ...any) *Rule {
+			return MakeRule(nil, &PseudoClassSelector{Type: typeName, ArgsFormatter: formatter, Args: pseudoArgs}, args...)
+		}
+	}
+}
+
+func pseudo(typeName string) func(args ...any) *Rule {
+	return func(args ...any) *Rule {
+		return MakeRule(nil, &PseudoClassSelector{Type: typeName}, args...)
+	}
+}
+
+var Active = pseudo("active")
+var AnyLink = pseudo("any-link")
+var Autofill = pseudo("autofill")
+var Blank = pseudo("blank")
+var Buffering = pseudo("buffering")
+var Checked = pseudo("checked")
+var Current = pseudoArgs("current", nil)
+var Default = pseudo("default")
+var Defined = pseudo("defined")
+var Dir = pseudoArgs("dir", nil)
+var Disabled = pseudo("disabled")
+var Empty = pseudo("empty")
+var Enabled = pseudo("enabled")
+var FirstChild = pseudo("first-child")
+var FirstOfType = pseudo("first-of-type")
+var Focus = pseudo("focus")
+var FocusVisible = pseudo("focus-visible")
+var FocusWithin = pseudo("focus-within")
+var Fullscreen = pseudo("fullscreen")
+var Future = pseudo("future")
+var Has = pseudoArgs("has", nil)
+var Hover = pseudo("hover")
+var Indeterminate = pseudo("indeterminate")
+
+// ...
+var LastChild = pseudo("last-child")
+
+// Declarations
+
+// Text
+
+var TextDecoration = dec("text-decoration")
+var TextTransform = dec("text-transform")
+
+// Colors
+var Color = dec("color")
+
+// Background
+var Background = dec("background")
+var BackgroundColor = dec("background-color")
+
+// Borders
+var BorderRadius = dec("border-radius")
+var BorderWidth = dec("border-width")
+var BorderStyle = dec("border-style")
+var BorderColor = dec("border-color")
+var Border = dec("border")
+var BorderBottom = dec("border-bottom")
+var BorderTop = dec("border-top")
+var BorderLeft = dec("border-left")
+var BorderRight = dec("border-right")
+
+// Padding
+var Padding = dec("padding")
+var PaddingTop = dec("padding-top")
+var PaddingBottom = dec("padding-bottom")
+var PaddingLeft = dec("padding-left")
+var PaddingRight = dec("padding-right")
+
+// Margin
+var Margin = dec("margin")
+var MarginTop = dec("margin-top")
+var MarginBottom = dec("margin-bottom")
+var MarginLeft = dec("margin-left")
+var MarginRight = dec("margin-right")
+
+// Transform
+var Transform = dec("transform")
+var TransformOrigin = dec("transform-origin")
+
+// Dimensions
+
+var Width = dec("width")
+var MinWidth = dec("min-width")
+var MaxWidth = dec("max-width")
+var Height = dec("height")
+var MinHeight = dec("min-height")
+var MaxHeight = dec("max-height")
+
+// Positioning
+
+var Position = dec("position")
+var Left = dec("left")
+var Top = dec("top")
+
+// Display
+
+var Display = dec("display")
+
+// Anything
+
+var Anything = dec("*")
+
+// Flexbox
+
+var FlexShrink = dec("flex-shrink")
+var FlexGrow = dec("flex-grow")
+var FlexBasis = dec("flex-basis")
+var FlexDirection = dec("flex-direction")
+var AlignItems = dec("align-items")
+var JustifyContent = dec("justify-content")
+
+// Fonts
+
+var FontSize = dec("font-size")
+var FontFamily = dec("font-family")
+var FontWeight = dec("font-weight")
+var FontStretch = dec("font-stretch")
+var LetterSpacing = dec("letter-spacing")
+var LineHeight = dec("line-height")
+
+// Lists
+
+var ListStyle = dec("list-style")
+
+// Opacity etc.
+
+var Opacity = dec("opacity")

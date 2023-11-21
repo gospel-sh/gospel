@@ -765,3 +765,41 @@ var Wbr = VoidTag("wbr")
 var Doctype = func(doctype string) *HTMLElement {
 	return &HTMLElement{Safe: true, Value: fmt.Sprintf("<!doctype %s>", doctype)}
 }
+
+// Tree walking
+
+func Walk[T any](element any, walker func(t T, element *HTMLElement)) {
+
+	walk := func(value any, element *HTMLElement) {
+		if t, ok := value.(T); ok {
+			walker(t, element)
+		}
+	}
+
+	htmlElement, ok := element.(*HTMLElement)
+
+	if !ok {
+		if htmlElementFunc, ok := element.(PureElementFunction); ok {
+			if htmlElement, ok = htmlElementFunc().(*HTMLElement); !ok {
+				return
+			}
+		}
+		return
+	}
+
+	walk(htmlElement, htmlElement)
+
+	for _, attribute := range htmlElement.Attributes {
+		walk(attribute, htmlElement)
+	}
+
+	for _, arg := range htmlElement.Args {
+		if t, ok := arg.(T); ok {
+			walker(t, htmlElement)
+		}
+	}
+
+	for _, child := range htmlElement.Children {
+		Walk(child, walker)
+	}
+}

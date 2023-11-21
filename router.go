@@ -213,7 +213,14 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 				Fragments: match[1:],
 			}
 
-			return c.Element(fmt.Sprintf("route.%d", i), routeElementFunc(r, matchedRoute))
+			element := c.Element(fmt.Sprintf("route.%d", i), routeElementFunc(r, matchedRoute))
+
+			// if the route didn't return anything we try the next one...
+			if element == nil {
+				continue
+			}
+
+			return element
 		}
 	}
 

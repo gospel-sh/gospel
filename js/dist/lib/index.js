@@ -95,7 +95,9 @@ function replaceDom(link, text, push) {
         if (script.type === "" || script.type === "application/javascript") {
             // we try to execute the script...
             try {
-                eval(script.innerText);
+                // we evaluate the script with the window as context to ensure
+                // it executs like a normal script tag would...
+                eval.apply(window, [script.innerText]);
             }
             catch (e) {
                 console.error(`Cannot execute script: ${e}`);
