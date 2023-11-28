@@ -178,6 +178,10 @@ func (r *Router) PopRoute() {
 	r.matchedRoutes = r.matchedRoutes[:len(r.matchedRoutes)-1]
 }
 
+func (r *Router) FullPath() string {
+	return r.context.Request().URL.Path
+}
+
 func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 
 	path := r.context.Request().URL.Path
