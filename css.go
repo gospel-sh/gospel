@@ -15,12 +15,15 @@ type Stylesheet struct {
 	Rules      []*Rule
 }
 
-func MakeStylesheet(name string, rules ...*Rule) *Stylesheet {
-	return &Stylesheet{
+func MakeStylesheet(name string, args ...any) *Stylesheet {
+	ss := &Stylesheet{
 		Name:       name,
-		Rules:      rules,
 		classIndex: 1,
 	}
+
+	ss.Rules = subrules(ss, args)
+
+	return ss
 }
 
 func Styled(name string, element Element) Element {
@@ -467,7 +470,7 @@ func filter[T any](args []any) []*T {
 
 // Declarations
 
-func dec(property string) func(value any) *Declaration {
+func Dec(property string) func(value any) *Declaration {
 	return func(value any) *Declaration {
 		return &Declaration{
 			Property: property,
@@ -690,90 +693,95 @@ var LastChild = pseudo("last-child")
 
 // Text
 
-var TextDecoration = dec("text-decoration")
-var TextTransform = dec("text-transform")
+var TextDecoration = Dec("text-decoration")
+var TextTransform = Dec("text-transform")
+var TextAlign = Dec("text-align")
+
+// Box Shadow
+
+var BoxShadow = Dec("box-shadow")
 
 // Colors
-var Color = dec("color")
+var Color = Dec("color")
 
 // Background
-var Background = dec("background")
-var BackgroundColor = dec("background-color")
+var Background = Dec("background")
+var BackgroundColor = Dec("background-color")
 
 // Borders
-var BorderRadius = dec("border-radius")
-var BorderWidth = dec("border-width")
-var BorderStyle = dec("border-style")
-var BorderColor = dec("border-color")
-var Border = dec("border")
-var BorderBottom = dec("border-bottom")
-var BorderTop = dec("border-top")
-var BorderLeft = dec("border-left")
-var BorderRight = dec("border-right")
+var BorderRadius = Dec("border-radius")
+var BorderWidth = Dec("border-width")
+var BorderStyle = Dec("border-style")
+var BorderColor = Dec("border-color")
+var Border = Dec("border")
+var BorderBottom = Dec("border-bottom")
+var BorderTop = Dec("border-top")
+var BorderLeft = Dec("border-left")
+var BorderRight = Dec("border-right")
 
 // Padding
-var Padding = dec("padding")
-var PaddingTop = dec("padding-top")
-var PaddingBottom = dec("padding-bottom")
-var PaddingLeft = dec("padding-left")
-var PaddingRight = dec("padding-right")
+var Padding = Dec("padding")
+var PaddingTop = Dec("padding-top")
+var PaddingBottom = Dec("padding-bottom")
+var PaddingLeft = Dec("padding-left")
+var PaddingRight = Dec("padding-right")
 
 // Margin
-var Margin = dec("margin")
-var MarginTop = dec("margin-top")
-var MarginBottom = dec("margin-bottom")
-var MarginLeft = dec("margin-left")
-var MarginRight = dec("margin-right")
+var Margin = Dec("margin")
+var MarginTop = Dec("margin-top")
+var MarginBottom = Dec("margin-bottom")
+var MarginLeft = Dec("margin-left")
+var MarginRight = Dec("margin-right")
 
 // Transform
-var Transform = dec("transform")
-var TransformOrigin = dec("transform-origin")
+var Transform = Dec("transform")
+var TransformOrigin = Dec("transform-origin")
 
 // Dimensions
 
-var Width = dec("width")
-var MinWidth = dec("min-width")
-var MaxWidth = dec("max-width")
-var Height = dec("height")
-var MinHeight = dec("min-height")
-var MaxHeight = dec("max-height")
+var Width = Dec("width")
+var MinWidth = Dec("min-width")
+var MaxWidth = Dec("max-width")
+var Height = Dec("height")
+var MinHeight = Dec("min-height")
+var MaxHeight = Dec("max-height")
 
 // Positioning
 
-var Position = dec("position")
-var Left = dec("left")
-var Top = dec("top")
+var Position = Dec("position")
+var Left = Dec("left")
+var Top = Dec("top")
 
 // Display
 
-var Display = dec("display")
+var Display = Dec("display")
 
 // Anything
 
-var Anything = dec("*")
+var Anything = Dec("*")
 
 // Flexbox
 
-var FlexShrink = dec("flex-shrink")
-var FlexGrow = dec("flex-grow")
-var FlexBasis = dec("flex-basis")
-var FlexDirection = dec("flex-direction")
-var AlignItems = dec("align-items")
-var JustifyContent = dec("justify-content")
+var FlexShrink = Dec("flex-shrink")
+var FlexGrow = Dec("flex-grow")
+var FlexBasis = Dec("flex-basis")
+var FlexDirection = Dec("flex-direction")
+var AlignItems = Dec("align-items")
+var JustifyContent = Dec("justify-content")
 
 // Fonts
 
-var FontSize = dec("font-size")
-var FontFamily = dec("font-family")
-var FontWeight = dec("font-weight")
-var FontStretch = dec("font-stretch")
-var LetterSpacing = dec("letter-spacing")
-var LineHeight = dec("line-height")
+var FontSize = Dec("font-size")
+var FontFamily = Dec("font-family")
+var FontWeight = Dec("font-weight")
+var FontStretch = Dec("font-stretch")
+var LetterSpacing = Dec("letter-spacing")
+var LineHeight = Dec("line-height")
 
 // Lists
 
-var ListStyle = dec("list-style")
+var ListStyle = Dec("list-style")
 
 // Opacity etc.
 
-var Opacity = dec("opacity")
+var Opacity = Dec("opacity")
