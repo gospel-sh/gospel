@@ -74,16 +74,16 @@ func (s *Stylesheet) Styles() Element {
 
 func subrules(parent Ruleset, args []any) []*Rule {
 	// we filter out rules directly
-	subrules := filter[Rule](args)
+	srs := filter[*Rule](args)
 
 	// we convert HTML elements into tag rules
-	elements := filter[HTMLElement](args)
+	elements := filter[*HTMLElement](args)
 
 	for _, element := range elements {
-		subrules = append(subrules, MakeRule(parent, &TagSelector{element.Tag}, element.Args...))
+		srs = append(srs, MakeRule(parent, &TagSelector{element.Tag}, element.Args...))
 	}
 
-	attributes := filter[HTMLAttribute](args)
+	attributes := filter[*HTMLAttribute](args)
 	for _, attribute := range attributes {
 		if attribute.Name == "class" {
 			strValue, ok := attribute.Value.(string)
@@ -91,11 +91,36 @@ func subrules(parent Ruleset, args []any) []*Rule {
 				// to do: properly handle this
 				continue
 			}
-			subrules = append(subrules, MakeRule(parent, &ClassSelector{ClassName: strValue, Source: attribute}, attribute.Args...))
+			srs = append(srs, MakeRule(parent, &ClassSelector{ClassName: strValue, Source: attribute}, attribute.Args...))
 		}
 	}
 
-	return subrules
+	// we filter out lists of arguments
+	lists := filter[[]any](args)
+
+	for _, list := range lists {
+		srs = append(srs, subrules(parent, list)...)
+	}
+
+	return srs
+}
+
+func declarations(args []any) []*Declaration {
+	decs := make([]*Declaration, 0, len(args))
+
+	for _, arg := range args {
+		switch vt := arg.(type) {
+		case *Declaration:
+			if vt == nil {
+				continue
+			}
+			decs = append(decs, vt)
+		case []any:
+			decs = append(decs, declarations(vt)...)
+		}
+	}
+
+	return decs
 }
 
 func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
@@ -105,7 +130,7 @@ func MakeRule(parent Ruleset, selector Selector, args ...any) *Rule {
 	rule := &Rule{
 		Parent:       parent,
 		Selector:     selector,
-		Declarations: filter[Declaration](args),
+		Declarations: declarations(args),
 		Subrules:     subrules,
 	}
 
@@ -400,7 +425,7 @@ func (r *Rule) Extend(args ...any) {
 	}
 
 	// we extend the rule with the new subrules and declarations
-	r.Declarations = append(r.Declarations, filter[Declaration](args)...)
+	r.Declarations = append(r.Declarations, filter[*Declaration](args)...)
 	r.Subrules = append(r.Subrules, subrules...)
 
 }
@@ -456,11 +481,11 @@ func (s *Size) Div(value float64) *Size {
 
 // helpers
 
-func filter[T any](args []any) []*T {
-	ts := make([]*T, 0, len(args))
+func filter[T any](args []any) []T {
+	ts := make([]T, 0, len(args))
 
 	for _, arg := range args {
-		if va, ok := arg.(*T); ok {
+		if va, ok := arg.(T); ok {
 			ts = append(ts, va)
 		}
 	}
@@ -611,14 +636,20 @@ type StylesStruct struct {
 	Rules []*Rule
 }
 
-// Convert a list of styles into a list of classes
-func Styles(args ...any) *StylesStruct {
+func rules(args []any) []*Rule {
 	rules := make([]*Rule, 0)
 	ruleArgs := make([]any, 0)
 	for _, arg := range args {
 
 		switch vt := arg.(type) {
 		case *Rule:
+
+			// we do the nil comparison here as it's a bit complicated:
+			// https://go.dev/doc/faq#nil_error
+			if vt == nil {
+				continue
+			}
+
 			if className := vt.Class(); className == "" {
 				// we append the rule to the rule args
 				ruleArgs = append(ruleArgs, vt)
@@ -627,9 +658,22 @@ func Styles(args ...any) *StylesStruct {
 				rules = append(rules, vt)
 			}
 		case *HTMLElement:
+
+			if vt == nil {
+				continue
+			}
+
 			ruleArgs = append(ruleArgs, vt)
 		case *Declaration:
+
+			if vt == nil {
+				continue
+			}
+
 			ruleArgs = append(ruleArgs, vt)
+		case []any:
+			stylesheet := Styles(vt...)
+			rules = append(rules, stylesheet.Rules...)
 		}
 	}
 
@@ -637,8 +681,13 @@ func Styles(args ...any) *StylesStruct {
 		rules = append(rules, MakeRule(nil, nil, ruleArgs...))
 	}
 
+	return rules
+}
+
+// Convert a list of styles into a list of classes
+func Styles(args ...any) *StylesStruct {
 	return &StylesStruct{
-		Rules: rules,
+		Rules: rules(args),
 	}
 }
 
@@ -707,6 +756,9 @@ var Color = Dec("color")
 // Background
 var Background = Dec("background")
 var BackgroundColor = Dec("background-color")
+var BackgroundImage = Dec("background-image")
+var BackgroundSize = Dec("background-size")
+var BackgroundPosition = Dec("background-position")
 
 // Borders
 var BorderRadius = Dec("border-radius")
@@ -785,3 +837,28 @@ var ListStyle = Dec("list-style")
 // Opacity etc.
 
 var Opacity = Dec("opacity")
+
+// Box Sizing
+
+var BoxSizing = Dec("box-sizing")
+
+// SVG
+
+var Stroke = Dec("stroke")
+var Fill = Dec("fill")
+var StrokeWidth = Dec("stroke-width")
+
+// Transitions
+
+var Transition = Dec("transition")
+
+// Filtering
+
+var Filter = Dec("filter")
+
+// Grid
+
+var GridTemplateColumns = Dec("grid-template-columns")
+var GridAutoRows = Dec("grid-auto-rows")
+var GridGap = Dec("grid-gap")
+var JustifyItems = Dec("justify-items")
