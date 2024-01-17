@@ -629,6 +629,7 @@ var As = Attrib("as")
 var Enctype = Attrib("enctype")
 var Placeholder = Attrib("placeholder")
 var Defer = BooleanAttrib("defer")
+var Download = BooleanAttrib("download")
 var Aria = func(tag string, value any, args ...any) *HTMLAttribute {
 	return Attrib(tag)(value, args...)
 }

@@ -21,7 +21,7 @@ func Interpolate(s string, args interface{}) (so string, er error) {
 		}
 	}()
 	// we change the default delimiters because they clash with Jinja...
-	t, err := template.New("foo").Delims("{", "}").Parse(s)
+	t, err := template.New("test").Delims("{", "}").Parse(s)
 	buf := new(bytes.Buffer)
 	err = t.Execute(buf, args)
 	return buf.String(), err

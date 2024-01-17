@@ -72,6 +72,13 @@ func (s *Stylesheet) Styles() Element {
 	)
 }
 
+func Direct(tagMaker func(makerArgs ...any) *HTMLElement) func(args ...any) *Rule {
+	return func(args ...any) *Rule {
+		element := tagMaker(args...)
+		return MakeRule(nil, &TagSelector{TagName: element.Tag, Direct: true}, element.Args...)
+	}
+}
+
 func subrules(parent Ruleset, args []any) []*Rule {
 	// we filter out rules directly
 	srs := filter[*Rule](args)
@@ -80,7 +87,7 @@ func subrules(parent Ruleset, args []any) []*Rule {
 	elements := filter[*HTMLElement](args)
 
 	for _, element := range elements {
-		srs = append(srs, MakeRule(parent, &TagSelector{element.Tag}, element.Args...))
+		srs = append(srs, MakeRule(parent, &TagSelector{TagName: element.Tag, Direct: false}, element.Args...))
 	}
 
 	attributes := filter[*HTMLAttribute](args)
@@ -281,10 +288,15 @@ func (s *PseudoClassSelector) String() string {
 
 type TagSelector struct {
 	TagName string
+	Direct  bool
 }
 
 func (s *TagSelector) String() string {
-	return fmt.Sprintf(" %s", s.TagName)
+	prefix := ""
+	if s.Direct {
+		prefix = " >"
+	}
+	return fmt.Sprintf("%s %s", prefix, s.TagName)
 }
 
 type MediaQuery struct {
@@ -514,7 +526,7 @@ func ClassRule(className string, args ...any) *Rule {
 
 func TagRule(tagName string) func(args ...any) *Rule {
 	return func(args ...any) *Rule {
-		return MakeRule(nil, &TagSelector{tagName}, args...)
+		return MakeRule(nil, &TagSelector{TagName: tagName, Direct: false}, args...)
 	}
 }
 
@@ -803,6 +815,7 @@ var MaxHeight = Dec("max-height")
 var Position = Dec("position")
 var Left = Dec("left")
 var Top = Dec("top")
+var Bottom = Dec("bottom")
 
 // Display
 

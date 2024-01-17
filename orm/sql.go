@@ -46,6 +46,7 @@ type Tag struct {
 
 type ModelSchema struct {
 	Optional            bool
+	IncludeOptional     bool
 	TableName           string
 	Type                reflect.Type
 	Fields              []*ModelSchemaField
@@ -63,11 +64,12 @@ type RelatedModelSchema struct {
 }
 
 type ModelSchemaField struct {
-	Name   string
-	Column string
-	Type   reflect.Type
-	Value  reflect.Value
-	Tags   []Tag
+	Name     string
+	Column   string
+	Optional bool
+	Type     reflect.Type
+	Value    reflect.Value
+	Tags     []Tag
 }
 
 // A SelectBuffer is used to buffer values from a SELECT for later processing.
@@ -126,6 +128,7 @@ func (s *ModelSchemaField) BufferFor(model QueryModel, optional bool) *SelectBuf
 	modelField := modelValue.FieldByName(s.Name)
 	selectBuffer := &SelectBuffer{}
 	if IsField(s.Type) {
+		selectBuffer.Value = ""
 		selectBuffer.Ptr = &selectBuffer.Value
 		// we make the pointer point to the value
 		selectBuffer.Field = modelField.Interface().(Field)
@@ -145,6 +148,9 @@ func (s *ModelSchema) SelectBuffers(model QueryModel) []*SelectBuffer {
 	selectBuffers := make([]*SelectBuffer, 0)
 	modelValue := valueOf(model)
 	for _, field := range s.Fields {
+		if field.Optional && !s.IncludeOptional {
+			continue
+		}
 		selectBuffer := field.BufferFor(model, s.Optional)
 		selectBuffers = append(selectBuffers, selectBuffer)
 	}
@@ -300,6 +306,9 @@ func extractFields(structValue reflect.Value) []*ModelSchemaField {
 			tag, _ := GetTag(tags, "col")
 			field.Column = tag.Value
 		}
+		if HasTag(tags, "optional") {
+			field.Optional = true
+		}
 		field.Tags = tags
 		fields = append(fields, field)
 	}
@@ -336,6 +345,10 @@ func addRelated(relatedModelSchemas []*RelatedModelSchema, tableName string) ([]
 		condition := fmt.Sprintf("%s \"%s\" %s ON %s.%s = %s.%s AND %s.deleted_at IS NULL", join, relatedTableName, qualifiedName, qualifiedName, relatedPkField.Column, tableName, relatedModelSchema.Column, qualifiedName)
 		joins = append(joins, condition)
 		for _, field := range relatedModelSchema.ModelSchema.Fields {
+			// we always skip optional fields for related models
+			if field.Optional {
+				continue
+			}
 			selectNames = append(selectNames, fmt.Sprintf("%s.%s", qualifiedName, field.Column))
 		}
 		var relatedJoins, relatedSelectNames []string
@@ -597,10 +610,9 @@ func (u *UpdateStmt) Statement() string {
 }
 
 func (d *UpdateStmt) Execute() error {
-	if rows, err := d.Model.Database()().Query(d.Statement(), append(d.Values, d.ConditionValues...)...); err != nil {
+	if _, err := d.Model.Database()().Exec(d.Statement(), append(d.Values, d.ConditionValues...)...); err != nil {
 		return err
 	} else {
-		rows.Close()
 		return nil
 	}
 }
@@ -620,10 +632,9 @@ func (d *DeleteStmt) Statement() string {
 }
 
 func (d *DeleteStmt) Execute() error {
-	if rows, err := d.Model.Database()().Query(d.Statement(), d.ConditionValues...); err != nil {
+	if _, err := d.Model.Database()().Exec(d.Statement(), d.ConditionValues...); err != nil {
 		return err
 	} else {
-		rows.Close()
 		return nil
 	}
 }
@@ -647,12 +658,19 @@ func GetLoadStmt(model QueryModel, queries map[string]interface{}, single bool) 
 
 	modelSchema := InferModelSchema(model)
 
+	if single {
+		modelSchema.IncludeOptional = true
+	}
+
 	tableName := model.TableName()
 	selectNames := make([]string, 0)
 
 	conditions, conditionValues := getConditions(tableName, queries, 0)
 
 	for _, field := range modelSchema.Fields {
+		if field.Optional && !modelSchema.IncludeOptional {
+			continue
+		}
 		selectNames = append(selectNames, fmt.Sprintf("\"%s\".%s", tableName, field.Column))
 	}
 
@@ -672,6 +690,7 @@ func GetLoadStmt(model QueryModel, queries map[string]interface{}, single bool) 
 		Conditions:      conditions,
 	}, nil
 }
+
 func Load(model QueryModel, queries map[string]interface{}, single bool) ([]QueryModel, error) {
 
 	stmt, err := GetLoadStmt(model, queries, single)
@@ -684,7 +703,6 @@ func Load(model QueryModel, queries map[string]interface{}, single bool) ([]Quer
 }
 
 func LoadWithStmt(stmt *LoadStmt) ([]QueryModel, error) {
-
 	models, err := stmt.Execute()
 
 	if err != nil {
@@ -718,17 +736,15 @@ func Delete(model QueryModel) error {
 		UPDATE
 			"%s"
 		SET
-			deleted_at = timezone('utc', now())
+			deleted_at = current_timestamp
 		WHERE id = $1
 		`, model.TableName())
 
-		rows, err := model.Database()().Query(deleteQuery, dbModel.ID)
+		_, err := model.Database()().Exec(deleteQuery, dbModel.ID)
 
 		if err != nil {
 			return err
 		}
-
-		rows.Close()
 
 	}
 	return nil
@@ -754,6 +770,12 @@ func Save(model QueryModel) error {
 	tableName := model.TableName()
 	p := 1
 	for _, field := range modelSchema.Fields {
+
+		// we skip optional fields if they are null
+		if field.Optional && IsNull(field.Value) {
+			continue
+		}
+
 		if HasTag(field.Tags, "onConflict") || (HasTag(field.Tags, "pk") && !HasTag(field.Tags, "noOnConflict")) {
 			conflictNames = append(conflictNames, field.Column)
 		}
@@ -788,8 +810,17 @@ func Save(model QueryModel) error {
 			v := field.Value.Interface()
 			if vf, ok := v.(Field); ok {
 				gv := vf.Get()
-				if gv == nil || reflect.ValueOf(gv).IsNil() {
+				if gv == nil {
 					gv = nil
+				} else {
+					vo := reflect.ValueOf(gv)
+
+					switch vo.Kind() {
+					case reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+						if vo.IsNil() {
+							gv = nil
+						}
+					}
 				}
 				insertValues = append(insertValues, gv)
 			} else {
@@ -835,6 +866,7 @@ func Save(model QueryModel) error {
 	if rows, err := model.Database()().Query(query, insertValues...); err != nil {
 		return err
 	} else {
+
 		defer rows.Close()
 
 		if len(returnValues) > 0 {
@@ -963,6 +995,13 @@ func valueOf(model QueryModel) reflect.Value {
 
 func typeOf(model QueryModel) reflect.Type {
 	return unpointType(reflect.TypeOf(model))
+}
+
+func InitType[T QueryModel](db func() DB) T {
+	var obj T
+	obj = reflect.New(reflect.TypeOf(obj).Elem()).Interface().(T)
+	Init(obj, db)
+	return obj
 }
 
 func Init(model QueryModel, db func() DB) QueryModel {

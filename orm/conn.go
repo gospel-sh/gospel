@@ -7,27 +7,30 @@ import (
 
 var connectionPool = MakeConnectionPool()
 
-func DBConnection(config map[string]interface{}) (*sql.DB, error) {
-	var err error
-	var interpolatedUrl, url, dbType string
-	var ok bool
-	if dbType, ok = config["type"].(string); !ok {
-		return nil, fmt.Errorf("Type missing")
-	}
-	if url, ok = config["url"].(string); !ok {
-		return nil, fmt.Errorf("URL missing")
-	}
-	if interpolatedUrl, err = Interpolate(url, config); err != nil {
-		return nil, err
-	}
-	return sql.Open(dbType, interpolatedUrl)
+type DatabaseSettings struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Url      string `json:"url"`
+	Database string `json:"database"`
+	Hostname string `json:"hostname"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
 }
 
-func Connect(name string, config map[string]any) (*sql.DB, error) {
+func DBConnection(settings *DatabaseSettings) (*sql.DB, error) {
+	if interpolatedUrl, err := Interpolate(settings.Url, settings); err != nil {
+		return nil, err
+	} else {
+		return sql.Open(settings.Type, interpolatedUrl)
+	}
+}
+
+func Connect(name string, settings *DatabaseSettings) (*sql.DB, error) {
 	var db *sql.DB
 	var err error
 	if db = connectionPool.Use(name); db == nil {
-		db, err = DBConnection(config)
+		db, err = DBConnection(settings)
 		if err != nil {
 			return nil, err
 		}

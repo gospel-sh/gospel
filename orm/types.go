@@ -208,10 +208,22 @@ func (e *UUID) Set(v interface{}) error {
 	}
 	bv, ok := v.([]byte)
 	if !ok {
-		return fmt.Errorf("invalid UUID value")
+
+		bs, ok := v.(string)
+		if ok {
+			if bv, err := hex.DecodeString(bs); err != nil {
+				return fmt.Errorf("invalid UUID value: %v", v)
+			} else {
+				e.UUID = bv
+				return nil
+			}
+		} else {
+			return fmt.Errorf("invalid UUID value: %v", v)
+		}
+	} else {
+		e.UUID = bv
+		return nil
 	}
-	e.UUID = bv
-	return nil
 }
 
 func (e *UUID) MarshalJSON() ([]byte, error) {
@@ -224,17 +236,54 @@ type DB interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 }
 
+type Time struct {
+	time.Time
+}
+
+func (t *Time) Init() {}
+
+// Generate a default value
+func (t *Time) Generate() error {
+	return nil
+}
+
+// Return a value for insertion into the database
+func (t *Time) Get() any {
+	if t.Time.IsZero() {
+		return nil
+	}
+	return t.Time.Format("2006-01-02 15:04:05")
+}
+
+// Set the new value
+func (t *Time) Set(v any) error {
+
+	if v == nil {
+		t.Time = time.Time{}
+		return nil
+	}
+
+	if tt, ok := v.(time.Time); ok {
+		t.Time = tt
+		return nil
+	}
+
+	var err error
+	t.Time, err = time.Parse("2006-01-02 15:04:05", v.(string))
+	return err
+}
+
 type DBBaseModel struct {
-	DB        func() DB  `json:"-" db:"ignore"`
-	Table     string     `json:"-" db:"ignore"`
-	DeletedAt *time.Time `json:"deleted_at"`
-	CreatedAt time.Time  `json:"created_at" db:"auto"`
-	UpdatedAt time.Time  `json:"updated_at" db:"update"`
+	DB        func() DB `json:"-" db:"ignore"`
+	Table     string    `json:"-" db:"ignore"`
+	DeletedAt *Time     `json:"deleted_at"`
+	CreatedAt *Time     `json:"created_at" db:"auto"`
+	UpdatedAt *Time     `json:"updated_at" db:"update"`
 }
 
 func (d *DBBaseModel) UpdateField(key string) error {
 	if key == "UpdatedAt" {
-		d.UpdatedAt = time.Now().UTC()
+		d.UpdatedAt = &Time{time.Now().UTC()}
 	}
 	return nil
 }
