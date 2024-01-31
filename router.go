@@ -162,6 +162,26 @@ func (r *Router) CurrentPathWithQuery() string {
 	return PathWithQuery(r.matchedRoutes[len(r.matchedRoutes)-1].Path, r.Query())
 }
 
+func (r *Router) UpdateQuery(updatedQuery map[string][]string) string {
+	if len(r.matchedRoutes) == 0 {
+		return ""
+	}
+
+	query := r.Query()
+
+	for k, v := range updatedQuery {
+		if v == nil {
+			// we remove the key
+			delete(query, k)
+		} else {
+			// we update the key
+			query[k] = v
+		}
+	}
+
+	return PathWithQuery(r.matchedRoutes[len(r.matchedRoutes)-1].Path, query)
+}
+
 func (r *Router) CurrentPath() string {
 	if len(r.matchedRoutes) == 0 {
 		return ""
