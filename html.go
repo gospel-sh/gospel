@@ -483,11 +483,23 @@ func Submittable() HTMLElementDecorator {
 	return func(element *HTMLElement) {
 
 		var formData *FormData
+		var method = "GET"
 		var hasFormData bool
 
 		for _, arg := range element.Args {
 			if formData, hasFormData = arg.(*FormData); hasFormData {
 				break
+			}
+		}
+
+		for _, attrib := range element.Attributes {
+			if attrib.Name == "method" {
+				if strValue, ok := attrib.Value.(string); !ok {
+					Log.Warning("%v form method is not a string", element)
+				} else {
+					// to do: check method type
+					method = strValue
+				}
 			}
 		}
 
@@ -503,9 +515,15 @@ func Submittable() HTMLElementDecorator {
 
 				router := UseRouter(c)
 				req := router.Request()
-				id := Cast(element.Attribute("id"), f.Id())
+				var id string
 
-				if req.Method == "POST" && c.Interactive() {
+				if idAttr := element.Attribute("id"); idAttr != nil {
+					id = Cast(idAttr.Value, f.Id())
+				} else {
+					id = f.Id()
+				}
+
+				if req.Method == method && c.Interactive() {
 
 					if HasContentType(req, "multipart/form-data") {
 						if err := req.ParseMultipartForm(1024 * 1024 * 10); err != nil {
@@ -536,7 +554,7 @@ func Submittable() HTMLElementDecorator {
 				}
 
 				// we append the ID of the form
-				element.Children = append(element.Children, Input(Type("hidden"), Name("_gspl"), Value(f.Id())))
+				element.Children = append(element.Children, Input(Type("hidden"), Name("_gspl"), Value(id)))
 
 				return []*HTMLAttribute{&HTMLAttribute{
 					Name:  "gospel-onSubmit",

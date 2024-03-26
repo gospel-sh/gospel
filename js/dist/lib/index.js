@@ -112,6 +112,8 @@ function addEventListeners() {
 function initDocument() {
     const forms = document.getElementsByTagName("form");
     for (const form of forms) {
+        if (form.dataset.plain !== undefined)
+            continue;
         console.log(`adding onSubmit handler to ${form.id}...`);
         form.onsubmit = handleOnSubmit;
     }

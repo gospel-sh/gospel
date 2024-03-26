@@ -65,6 +65,8 @@ async function handleOnSubmit(e: SubmitEvent) {
 		method: method,
 	}
 
+
+
 	if (method == 'get'){
 		// for a get request, we convert the formData to query parameters
 		const url = new URL(action);
@@ -140,6 +142,8 @@ function initDocument(){
 	const forms = document.getElementsByTagName("form");
 
 	for(const form of forms){
+		if (form.dataset.plain !== undefined)
+			continue;
 		console.log(`adding onSubmit handler to ${form.id}...`);
 		(form as HTMLFormElement).onsubmit = handleOnSubmit;
 	}

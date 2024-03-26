@@ -14,7 +14,7 @@
 	<div id="mapView"></div>
 	<script type="module">
 
-		const {derive, H1, Span, Literal, Attribute, Text, Mapping, List, Div, P, For, If, Li, Ul} = gospel.reactive;
+		const {H1, Span, Literal, Attribute, Text, Mapping, List, Div, P, For, If, Li, Ul, not} = gospel.reactive;
 
 		const firstPart = new Literal("foo");
 		const secondPart = new Literal("bar");
@@ -41,11 +41,11 @@
 			),
 			If(
 				showFooter,
-				P(Text("this is the footer"), Text(footerValue)),
+				P(Text("this is the footer "), Text(footerValue)),
 			),
 			If(
-				derive(() => new Literal(!showFooter.get()), [showFooter]),
-				P(Text("no footer"), Text(footerValue)),
+				not(showFooter),
+				P(Text("no footer "), Text(footerValue)),
 			),
 		)
 
@@ -81,28 +81,23 @@
 
 	<script type="module">
 
-		const r = gospel.reactive
+		const {List, Div, Text, If, Span, Mapping, Literal, not, is} = gospel.reactive
 
-		const path = new r.List(["a"])
+		const path = new List(["a", "b"])
 
 		const MapView = (map, path, index) => {
-			// we first derive the key value from the path
-			const key = r.derive(() => path.get(index), [path])
-			// we then derive the mapValue
-			const mapValue = r.derive(() => map.get(key.get()),[map, key])
-			// check if the map value is a literal
-			const isLiteral = r.derive(() => new r.Literal(!(mapValue instanceof r.Mapping)), [mapValue])
-			const notIsLiteral = r.derive(() => new r.Literal(!isLiteral.get()), [isLiteral])
 
-			// return a div
-			return r.Div(
-				r.Text(key),
-				r.If(isLiteral, r.Span(r.Span(r.Text("---")), r.Text(mapValue))),
-				r.If(notIsLiteral, () => MapView(mapValue, path, index+1)),
+			const key = path.get(index)
+			const mapValue = map.get(key)
+
+			return Div(
+				Text(key),
+				If(is(mapValue, Literal), Span(Span(Text("---")), Text(mapValue))),
+				If(is(mapValue, Mapping), () => MapView(mapValue, path, index+1)),
 			)
 		}
 
-		const map = new r.Mapping({"a": "b"})
+		const map = new Mapping({"a": new Mapping({"b": "cd"})})
 
 		const root = document.getElementById("mapView");
 
@@ -110,7 +105,14 @@
 
 		mapView.render(root);
 
-		map.get("a").set("c");
+		const setA = () => {
+			map.set("a", new Literal("foo"))
+			setTimeout(() => {
+				map.set("a", new Mapping({"b": "foobar"}))
+			}, 1000)
+		}
+
+		setInterval(setA, 2000);
 
 	</script>
 	<input onInput="firstPart.set(event.target.value)"/>

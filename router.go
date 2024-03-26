@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"strings"
 )
 
 type Router struct {
@@ -32,7 +33,28 @@ func MakeRouter(context Context) *Router {
 
 type RouteConfig struct {
 	Route       string
+	regexp      *regexp.Regexp
+	err         error
 	ElementFunc any
+}
+
+func (r *RouteConfig) Regexp() (*regexp.Regexp, error) {
+	if r.regexp == nil {
+		// we compile the regular expression
+		routeRegexp := r.Route
+
+		// we always enforce matching from the beginning
+		if !strings.HasPrefix("^", routeRegexp) {
+			routeRegexp = "^" + routeRegexp
+		}
+
+		if re, err := regexp.Compile(routeRegexp); err != nil {
+			return nil, fmt.Errorf("cannot compile regex '%s': %w", routeRegexp, err)
+		} else {
+			r.regexp = re
+		}
+	}
+	return r.regexp, nil
 }
 
 func (r *Router) Request() *http.Request {
@@ -220,13 +242,14 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 			continue
 		}
 
-		re, err := regexp.Compile(routeConfig.Route)
+		re, err := routeConfig.Regexp()
 
 		if err != nil {
 			Log.Warning("Cannot compile route '%s': %v", routeConfig.Route, err)
 			continue
 		}
 
+		// we match against the current path fragment
 		match := re.FindStringSubmatch(path)
 
 		if len(match) > 0 {
@@ -240,7 +263,7 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 			element := c.Element(fmt.Sprintf("route.%d", i), routeElementFunc(r, matchedRoute))
 
 			// if the route didn't return anything we try the next one...
-			if element == nil {
+			if element == nil && c.RespondWith() == nil && r.RedirectedTo() == "" {
 				continue
 			}
 
