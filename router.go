@@ -44,7 +44,7 @@ func (r *RouteConfig) Regexp() (*regexp.Regexp, error) {
 		routeRegexp := r.Route
 
 		// we always enforce matching from the beginning
-		if !strings.HasPrefix("^", routeRegexp) {
+		if !strings.HasPrefix("^", routeRegexp) && routeRegexp != "" {
 			routeRegexp = "^" + routeRegexp
 		}
 

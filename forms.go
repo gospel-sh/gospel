@@ -6,6 +6,8 @@ import (
 
 type FormData struct {
 	context Context
+	id      string
+	method  string
 	data    *VarObj[url.Values]
 }
 
@@ -40,8 +42,21 @@ func (f *FormData) Set(data url.Values) {
 }
 
 func MakeFormData(c Context) *FormData {
+	req := c.Request()
+
+	if HasContentType(req, "multipart/form-data") {
+		// to do: make memory limit configurable
+		if err := req.ParseMultipartForm(1024 * 1024 * 10); err != nil {
+			// return nil, fmt.Errorf("cannot parse multipart form: %w", err)
+			Log.Error("Cannot parse multipart form data: $w", err)
+		}
+	} else if err := req.ParseForm(); err != nil {
+		Log.Error("Cannot parse form: %w", err)
+		// return nil, fmt.Errorf("cannot parse form: %w", err)
+	}
+
 	return &FormData{
 		context: c,
-		data:    Var[url.Values](c, url.Values(nil)),
+		data:    Var[url.Values](c, req.Form),
 	}
 }

@@ -11,11 +11,11 @@ import (
 )
 
 type Element interface {
-	RenderElement(Context) string
+	RenderElement() string
 }
 
 type Attribute interface {
-	RenderAttribute(Context) string
+	RenderAttribute() string
 }
 
 type HTMLElement struct {
@@ -87,7 +87,7 @@ func Attrib(tag string) func(value any, args ...any) *HTMLAttribute {
 	}
 }
 
-func (a *HTMLAttribute) RenderAttribute(c Context) string {
+func (a *HTMLAttribute) RenderAttribute() string {
 
 	if a.Hidden {
 		return ""
@@ -118,7 +118,7 @@ func (a *HTMLAttribute) RenderAttribute(c Context) string {
 	return fmt.Sprintf("%s=\"%s%s\"", html.EscapeString(a.Name), html.EscapeString(strValue), extraArgs)
 }
 
-func (h *HTMLElement) RenderElement(c Context) string {
+func (h *HTMLElement) RenderElement() string {
 
 	if strValue, ok := h.Value.(string); ok {
 
@@ -134,7 +134,7 @@ func (h *HTMLElement) RenderElement(c Context) string {
 
 	for _, attribute := range h.Attributes {
 
-		ra := attribute.RenderAttribute(c)
+		ra := attribute.RenderAttribute()
 
 		if ra == "" {
 			continue
@@ -147,7 +147,7 @@ func (h *HTMLElement) RenderElement(c Context) string {
 		return fmt.Sprintf("<%[1]s%[2]s/>", h.Tag, renderedAttributes)
 	} else {
 
-		renderedChildren := h.RenderChildren(c)
+		renderedChildren := h.RenderChildren()
 
 		if h.Tag == "" {
 			return renderedChildren
@@ -158,7 +158,7 @@ func (h *HTMLElement) RenderElement(c Context) string {
 
 }
 
-func (h *HTMLElement) RenderChildren(c Context) string {
+func (h *HTMLElement) RenderChildren() string {
 	renderedChildren := ""
 
 	for _, child := range h.Children {
@@ -186,7 +186,7 @@ func (h *HTMLElement) RenderChildren(c Context) string {
 
 		}
 
-		renderedChildren += htmlChild.RenderElement(c)
+		renderedChildren += htmlChild.RenderElement()
 	}
 
 	return renderedChildren
@@ -610,10 +610,15 @@ func isScript(element *HTMLElement) {
 	}
 }
 
+type ElementsMap map[string]func(args ...any) *HTMLElement
+
+var elements ElementsMap = ElementsMap{}
+
 func Tag(tag string, decorators ...HTMLElementDecorator) func(args ...any) *HTMLElement {
-	return func(args ...any) *HTMLElement {
+	elements[tag] = func(args ...any) *HTMLElement {
 		return makeTag(tag, args, false, decorators)
 	}
+	return elements[tag]
 }
 
 func VoidTag(tag string, decorators ...HTMLElementDecorator) func(args ...any) *HTMLElement {
