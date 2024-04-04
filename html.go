@@ -341,6 +341,35 @@ func Selectable() HTMLElementDecorator {
 	}
 }
 
+func (h *HTMLElement) Generate(c Context) (any, error) {
+
+	newArgs := make([]any, 0, len(h.Args))
+	// we only iterate over the args
+	for _, arg := range h.Args {
+		if ga, ok := arg.(Generator); ok {
+			if element, err := ga.Generate(c); err != nil {
+				return nil, fmt.Errorf("cannot generate argument: %v", err)
+			} else {
+				newArgs = append(newArgs, element)
+			}
+		} else if gf, ok := arg.(GeneratorFunction); ok {
+			if element, err := gf(c); err != nil {
+				return nil, fmt.Errorf("cannot generate argument: %v", err)
+			} else {
+				newArgs = append(newArgs, element)
+			}
+		} else {
+			newArgs = append(newArgs, arg)
+		}
+	}
+
+	if ef, ok := elements[h.Tag]; !ok {
+		return nil, fmt.Errorf("unknown HTML tag: %s", h.Tag)
+	} else {
+		return ef(newArgs...), nil
+	}
+}
+
 func (h *HTMLElement) Attribute(name string) *HTMLAttribute {
 	for _, attribute := range h.Attributes {
 		if attribute.Name == name {

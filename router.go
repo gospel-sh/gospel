@@ -38,6 +38,46 @@ type RouteConfig struct {
 	ElementFunc any
 }
 
+func (r *RouteConfig) Match(context Context, router *Router) Element {
+
+	path := context.Request().URL.Path
+
+	var previousPath string
+
+	currentRoute := router.CurrentRoute()
+
+	if currentRoute != nil {
+		// we remove the prefix that was already matched
+		previousPath = path[:len(currentRoute.Path)]
+		path = path[len(currentRoute.Path):]
+	}
+
+	re, err := r.Regexp()
+
+	if err != nil {
+		Log.Warning("Cannot compile route '%s': %v", r.Route, err)
+		return nil
+	}
+
+	// we match against the current path fragment
+	match := re.FindStringSubmatch(path)
+
+	if len(match) > 0 {
+		matchedRoute := &MatchedRoute{
+			Config:    r,
+			Path:      previousPath + match[0],
+			Fragments: match[1:],
+		}
+		return context.Element(fmt.Sprintf("route.%s", r.Route), routeElementFunc(router, matchedRoute))
+	}
+	return nil
+}
+
+// generates an element if the route config matches the current route
+func (r *RouteConfig) Generate(c Context) (any, error) {
+	return r.Match(c, UseRouter(c)), nil
+}
+
 func (r *RouteConfig) Regexp() (*regexp.Regexp, error) {
 	if r.regexp == nil {
 		// we compile the regular expression
@@ -85,13 +125,13 @@ func Route(route string, elementFunc any) *RouteConfig {
 }
 
 // calls the handler with the context
-func callElementFunc(context Context, handler any, params []string) Element {
+func callElementFunc(context Context, handler any, params []string) (Element, error) {
 
-	value := reflect.ValueOf(handler)
+	handlerValue := reflect.ValueOf(handler)
+	handlerType := reflect.TypeOf(handler)
 
-	if value.Kind() != reflect.Func {
-		Log.Error("not a function")
-		return nil
+	if handlerValue.Kind() != reflect.Func {
+		return nil, fmt.Errorf("not a function")
 	}
 
 	paramsValues := make([]reflect.Value, 0, len(params))
@@ -102,15 +142,41 @@ func callElementFunc(context Context, handler any, params []string) Element {
 
 	contextValue := reflect.ValueOf(context)
 
-	responseValue := value.Call(append([]reflect.Value{contextValue}, paramsValues...))
+	var responseValue []reflect.Value
+
+	// we check that the handler has more than one parameter
+	if handlerType.NumIn() == 0 {
+		return nil, fmt.Errorf("handler does not accept any arguments")
+	}
+
+	// we check that the handler accepts a context as its first parameter
+	if !handlerType.In(0).Implements(reflect.TypeOf((*Context)(nil)).Elem()) {
+		return nil, fmt.Errorf("handler does not accept a context")
+	}
+
+	if handlerType.NumIn() == 1 {
+		// the handler only accepts a context
+		responseValue = handlerValue.Call(append([]reflect.Value{contextValue}))
+	} else if handlerType.NumIn() == 1+len(paramsValues) {
+		// the handler accepts context and URL parameters (which we check below)
+		for i := 1; i < handlerType.NumIn(); i++ {
+			if handlerType.In(i).Kind() != reflect.String {
+				return nil, fmt.Errorf("handler function does not accept a string")
+			}
+		}
+		responseValue = handlerValue.Call(append([]reflect.Value{contextValue}, paramsValues...))
+	} else {
+		// the handler has an unexpected number of parameters
+		return nil, fmt.Errorf("invalid number of parameters in handler (expected 1 or %d, got %d)", 1+len(paramsValues), handlerType.NumIn())
+	}
 
 	v := responseValue[0].Interface()
 
 	if v != nil {
-		return v.(Element)
+		return v.(Element), nil
 	}
 
-	return nil
+	return nil, nil
 
 }
 
@@ -132,7 +198,11 @@ func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
 		element, ok := matchedRoute.Config.ElementFunc.(Element)
 
 		if !ok {
-			element = callElementFunc(c, matchedRoute.Config.ElementFunc, matchedRoute.Fragments)
+			var err error
+			if element, err = callElementFunc(c, matchedRoute.Config.ElementFunc, matchedRoute.Fragments); err != nil {
+				Log.Error("error in matched route '%s': %v", matchedRoute.Path, err)
+				return nil
+			}
 		}
 
 		// we restore the previous route
@@ -226,51 +296,20 @@ func (r *Router) FullPath() string {
 
 func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 
-	path := r.context.Request().URL.Path
-
-	var previousPath string
-
-	if r.CurrentRoute() != nil {
-		// we remove the prefix that was already matched
-		previousPath = path[:len(r.CurrentRoute().Path)]
-		path = path[len(r.CurrentRoute().Path):]
-	}
-
-	for i, routeConfig := range routeConfigs {
+	for _, routeConfig := range routeConfigs {
 
 		if routeConfig == nil {
 			continue
 		}
 
-		re, err := routeConfig.Regexp()
+		element := routeConfig.Match(c, r)
 
-		if err != nil {
-			Log.Warning("Cannot compile route '%s': %v", routeConfig.Route, err)
+		// if the route didn't return anything we try the next one...
+		if element == nil && c.RespondWith() == nil && r.RedirectedTo() == "" {
 			continue
 		}
-
-		// we match against the current path fragment
-		match := re.FindStringSubmatch(path)
-
-		if len(match) > 0 {
-
-			matchedRoute := &MatchedRoute{
-				Config:    routeConfig,
-				Path:      previousPath + match[0],
-				Fragments: match[1:],
-			}
-
-			element := c.Element(fmt.Sprintf("route.%d", i), routeElementFunc(r, matchedRoute))
-
-			// if the route didn't return anything we try the next one...
-			if element == nil && c.RespondWith() == nil && r.RedirectedTo() == "" {
-				continue
-			}
-
-			return element
-		}
+		return element
 	}
-
 	return nil
 }
 
