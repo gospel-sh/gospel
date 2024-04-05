@@ -870,6 +870,7 @@ func Save(model QueryModel) error {
 		defer rows.Close()
 
 		if len(returnValues) > 0 {
+
 			found := rows.Next()
 
 			if !found {
@@ -1004,7 +1005,7 @@ func InitType[T QueryModel](db func() DB) T {
 	return obj
 }
 
-func Init(model QueryModel, db func() DB) QueryModel {
+func Init[T QueryModel](model T, db func() DB) T {
 	modelValue := valueOf(model)
 	if model.TableName() == "" {
 		model.SetTableName(ToSnakeCase(modelValue.Type().Name()))
