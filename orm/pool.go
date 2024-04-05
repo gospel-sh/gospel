@@ -18,6 +18,19 @@ func MakeConnectionPool() *ConnectionPool {
 	}
 }
 
+func (c *ConnectionPool) Clear() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	for _, db := range c.connections {
+		if err := db.Close(); err != nil {
+			return err
+		}
+	}
+	c.connections = make(map[string]*sql.DB)
+	c.users = make(map[string]int)
+	return nil
+}
+
 func (c *ConnectionPool) Create(name string, db *sql.DB) bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

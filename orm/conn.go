@@ -7,6 +7,10 @@ import (
 
 var connectionPool = MakeConnectionPool()
 
+func ClearConnections() error {
+	return connectionPool.Clear()
+}
+
 type DatabaseSettings struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
