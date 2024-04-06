@@ -46,3 +46,23 @@ func Objects[G any, T interface {
 
 	return ts, nil
 }
+
+func Query[G any, T interface {
+	*G
+	QueryModel
+}](db func() DB, query string, args ...any) ([]T, error) {
+	obj := InitType[T](db)
+	objs, err := GetQueryStmt(obj, query).Execute(args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	ts := make([]T, len(objs))
+
+	for i, obj := range objs {
+		ts[i] = obj.(T)
+	}
+
+	return ts, nil
+}

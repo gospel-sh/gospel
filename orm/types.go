@@ -268,8 +268,14 @@ func (t *Time) Set(v any) error {
 		return nil
 	}
 
+	strV, ok := v.(string)
+
+	if !ok {
+		return fmt.Errorf("expected a string, got %T for time", v)
+	}
+
 	var err error
-	t.Time, err = time.Parse("2006-01-02 15:04:05", v.(string))
+	t.Time, err = time.Parse("2006-01-02 15:04:05", strV)
 	return err
 }
 
@@ -278,7 +284,7 @@ type DBBaseModel struct {
 	Table     string    `json:"-" db:"ignore"`
 	DeletedAt *Time     `json:"deleted_at"`
 	CreatedAt *Time     `json:"created_at" db:"auto"`
-	UpdatedAt *Time     `json:"updated_at" db:"update"`
+	UpdatedAt *Time     `json:"updated_at" db:"update,readAfterWrite"`
 }
 
 func (d *DBBaseModel) UpdateField(key string) error {
