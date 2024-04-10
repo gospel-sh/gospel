@@ -19,13 +19,27 @@ type Attribute interface {
 }
 
 type HTMLElement struct {
-	Tag        string
-	Void       bool
-	Value      any
-	Safe       bool
-	Children   []any
-	Attributes []*HTMLAttribute
-	Args       []any
+	Tag        string                 `json:"tag"`
+	Void       bool                   `json:"void"`
+	Value      any                    `json:"value"`
+	Safe       bool                   `json:"safe"`
+	Children   []any                  `json:"children" graph:"include"`
+	Attributes []*HTMLAttribute       `json:"attributes" graph:"include"`
+	Decorators []HTMLElementDecorator `json:"-"`
+	Args       []any                  `json:"args" graph:"ignore"`
+}
+
+func (h *HTMLElement) Copy() *HTMLElement {
+	return &HTMLElement{
+		Tag:        h.Tag,
+		Void:       h.Void,
+		Value:      h.Value,
+		Safe:       h.Safe,
+		Children:   h.Children,
+		Attributes: h.Attributes,
+		Decorators: h.Decorators,
+		Args:       h.Args,
+	}
 }
 
 type HTMLAttribute struct {
@@ -178,6 +192,8 @@ func (h *HTMLElement) RenderChildren() string {
 				htmlChild, ok = htmlFuncChild().(*HTMLElement)
 
 				if !ok {
+					continue
+				} else if htmlChild == nil {
 					continue
 				}
 			} else {
@@ -342,32 +358,29 @@ func Selectable() HTMLElementDecorator {
 }
 
 func (h *HTMLElement) Generate(c Context) (any, error) {
-
-	newArgs := make([]any, 0, len(h.Args))
+	newChildren := make([]any, 0, len(h.Children))
 	// we only iterate over the args
-	for _, arg := range h.Args {
-		if ga, ok := arg.(Generator); ok {
+	for _, child := range h.Children {
+		if ga, ok := child.(Generator); ok {
 			if element, err := ga.Generate(c); err != nil {
 				return nil, fmt.Errorf("cannot generate argument: %v", err)
 			} else {
-				newArgs = append(newArgs, element)
-			}
-		} else if gf, ok := arg.(GeneratorFunction); ok {
-			if element, err := gf(c); err != nil {
-				return nil, fmt.Errorf("cannot generate argument: %v", err)
-			} else {
-				newArgs = append(newArgs, element)
+				newChildren = append(newChildren, element)
 			}
 		} else {
-			newArgs = append(newArgs, arg)
+			newChildren = append(newChildren, child)
 		}
 	}
 
-	if ef, ok := elements[h.Tag]; !ok {
-		return nil, fmt.Errorf("unknown HTML tag: %s", h.Tag)
-	} else {
-		return ef(newArgs...), nil
+	el := h.Copy()
+	el.Children = newChildren
+
+	// we apply all decorators to the element
+	for _, decorator := range el.Decorators {
+		decorator(el)
 	}
+
+	return el, nil
 }
 
 func (h *HTMLElement) Attribute(name string) *HTMLAttribute {
@@ -611,6 +624,7 @@ func makeTag(tag string, args []any, void bool, decorators []HTMLElementDecorato
 		Void:       void,
 		Children:   children(args...),
 		Attributes: attributes(args...),
+		Decorators: decorators,
 		Args:       args,
 	}
 
@@ -788,6 +802,7 @@ var Summary = Tag("summary")
 var Slot = Tag("slot")
 var Template = Tag("template")
 var Select = Tag("select", Selectable())
+var LiteralTag = Tag("")
 
 // Safe values
 var Nbsp = SafeLiteral("&nbsp;")
@@ -835,6 +850,8 @@ func Walk[T any](element any, walker func(t T, element *HTMLElement)) {
 	if !ok {
 		if htmlElementFunc, ok := element.(PureElementFunction); ok {
 			if htmlElement, ok = htmlElementFunc().(*HTMLElement); !ok {
+				return
+			} else if htmlElement == nil {
 				return
 			}
 		}

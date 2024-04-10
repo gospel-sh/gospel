@@ -126,9 +126,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	renderedElement := elem.RenderElement()
+
 	w.Header().Add("content-type", "text/html")
 	w.WriteHeader(ctx.StatusCode())
-	w.Write([]byte(elem.RenderElement()))
+	w.Write([]byte(renderedElement))
 
 }
 

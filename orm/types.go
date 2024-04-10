@@ -194,6 +194,10 @@ func (e *UUID) HexString() string {
 	return hex.EncodeToString(e.UUID)
 }
 
+func (e *UUID) Scan(v any) error {
+	return e.Set(v)
+}
+
 func (e *UUID) Get() interface{} {
 	if len(e.UUID) == 0 {
 		return nil
@@ -230,10 +234,16 @@ func (e *UUID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(hex.EncodeToString(e.UUID))
 }
 
-type DB interface {
+type Transaction interface {
 	Prepare(query string) (*sql.Stmt, error)
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+type DB interface {
+	Transaction
+	Settings() *DatabaseSettings
+	Begin() (*sql.Tx, error)
 }
 
 type Time struct {
@@ -245,6 +255,10 @@ func (t *Time) Init() {}
 // Generate a default value
 func (t *Time) Generate() error {
 	return nil
+}
+
+func (t *Time) Scan(value any) error {
+	return t.Set(value)
 }
 
 // Return a value for insertion into the database
@@ -264,7 +278,8 @@ func (t *Time) Set(v any) error {
 	}
 
 	if tt, ok := v.(time.Time); ok {
-		t.Time = tt
+		// we enforce UTC
+		t.Time = tt.UTC()
 		return nil
 	}
 
@@ -275,8 +290,13 @@ func (t *Time) Set(v any) error {
 	}
 
 	var err error
-	t.Time, err = time.Parse("2006-01-02 15:04:05", strV)
-	return err
+
+	if t.Time, err = time.Parse("2006-01-02 15:04:05", strV); err != nil {
+		return err
+	} else {
+		t.Time = t.Time.UTC()
+		return nil
+	}
 }
 
 type DBBaseModel struct {

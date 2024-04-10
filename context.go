@@ -6,7 +6,7 @@ import (
 )
 
 type ElementFunction func(c Context) Element
-type PureElementFunction func() Element
+type PureElementFunction = func() Element
 type RespondWithFunction func(c Context, w http.ResponseWriter)
 
 type Context interface {
@@ -214,7 +214,6 @@ func (d *DefaultContext) DeferElement(key string, elementFunction ElementFunctio
 	return func() Element {
 		return elementFunction(c)
 	}
-
 }
 
 func (d *DefaultContext) Element(key string, elementFunction ElementFunction) Element {
@@ -237,12 +236,6 @@ func (d *DefaultContext) Scope(key string) Context {
 
 func (d *DefaultContext) Execute(elementFunction ElementFunction) Element {
 	d.root.interactive = true
-	// interactive tree generation (i.e. call functions to modify variables)
-	elementFunction(d)
-	d.root.Store.Flush()
-	// non-interactive tree generation (i.e. do not modify variables)
-	// to do: only rerender parts that have changed during the interactive part...
-	d.root.interactive = false
 	return elementFunction(d)
 }
 

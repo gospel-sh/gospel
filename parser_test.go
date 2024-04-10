@@ -17,9 +17,6 @@ html template test <p buz=bam>
 	>
 
 	</div>
-	{
-		foo
-	}
 </p>
 
 html template foo <p></p>

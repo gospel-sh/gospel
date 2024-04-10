@@ -382,7 +382,7 @@ type QueryStmt struct {
 
 func (q *QueryStmt) Execute(args ...any) ([]QueryModel, error) {
 
-	models := make([]QueryModel, 0)
+	models := make([]QueryModel, 0, 1000)
 
 	if rows, err := q.Model.Database()().Query(q.Query, args...); err != nil {
 		return nil, err
@@ -412,6 +412,7 @@ func (q *QueryStmt) Execute(args ...any) ([]QueryModel, error) {
 			q.ModelSchema.CheckForNull(nextModel)
 			models = append(models, nextModel)
 		}
+
 	}
 
 	return models, nil

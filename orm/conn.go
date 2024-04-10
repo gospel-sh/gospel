@@ -30,7 +30,16 @@ func DBConnection(settings *DatabaseSettings) (*sql.DB, error) {
 	}
 }
 
-func Connect(name string, settings *DatabaseSettings) (*sql.DB, error) {
+type WrappedDB struct {
+	*sql.DB
+	settings *DatabaseSettings
+}
+
+func (w *WrappedDB) Settings() *DatabaseSettings {
+	return w.settings
+}
+
+func Connect(name string, settings *DatabaseSettings) (DB, error) {
 	var db *sql.DB
 	var err error
 	if db = connectionPool.Use(name); db == nil {
@@ -49,5 +58,5 @@ func Connect(name string, settings *DatabaseSettings) (*sql.DB, error) {
 		}
 	}
 
-	return db, nil
+	return &WrappedDB{DB: db, settings: settings}, nil
 }

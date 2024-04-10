@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/gospel-sh/gospel"
 	"io/fs"
 	"io/ioutil"
-	"log"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -53,7 +53,7 @@ type MigrationManager struct {
 	UpMigrations   map[int]Migration
 	DownMigrations map[int]Migration
 	latestVersion  int
-	DB             *sql.DB
+	DB             DB
 	DBType         string
 }
 
@@ -154,7 +154,7 @@ func (self *MigrationManager) Migrate(version int) error {
 func (self *MigrationManager) ExecuteMigrations(tx *sql.Tx, migrations []Migration) error {
 	for _, migration := range migrations {
 
-		log.Printf("Executing migration %v\n", migration.FileName)
+		gospel.Log.Debug("Executing migration %v\n", migration.FileName)
 
 		templ, err := template.New(migration.FileName).Parse(migration.Content)
 
@@ -244,7 +244,7 @@ func (self *MigrationManager) LoadConfig(ConfigPath string) error {
 	return nil
 }
 
-func MakeMigrationManager(configPath string, fS fs.FS, db *sql.DB, dbType string) (*MigrationManager, error) {
+func MakeMigrationManager(configPath string, fS fs.FS, db DB, dbType string) (*MigrationManager, error) {
 
 	migrationManager := &MigrationManager{
 		Path:   configPath,
