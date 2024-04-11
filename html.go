@@ -25,8 +25,8 @@ type HTMLElement struct {
 	Safe       bool                   `json:"safe"`
 	Children   []any                  `json:"children" graph:"include"`
 	Attributes []*HTMLAttribute       `json:"attributes" graph:"include"`
-	Decorators []HTMLElementDecorator `json:"-"`
 	Args       []any                  `json:"args" graph:"ignore"`
+	Decorators []HTMLElementDecorator `json:"-"`
 }
 
 func (h *HTMLElement) Copy() *HTMLElement {
@@ -242,6 +242,8 @@ func children(args ...any) (chldr []any) {
 		} else if str, ok := arg.(string); ok {
 			chldr = append(chldr, Literal(str))
 		} else if _, ok := arg.(PureElementFunction); ok {
+			chldr = append(chldr, arg)
+		} else if _, ok := arg.(Generator); ok {
 			chldr = append(chldr, arg)
 		}
 	}

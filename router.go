@@ -35,7 +35,7 @@ type RouteConfig struct {
 	Route       string
 	regexp      *regexp.Regexp
 	err         error
-	ElementFunc any
+	ElementFunc any `graph:"include"`
 }
 
 func (r *RouteConfig) Match(context Context, router *Router) Element {
