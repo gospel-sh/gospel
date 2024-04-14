@@ -11,6 +11,7 @@ import (
 
 type Router struct {
 	context       Context
+	prefix        string
 	matchedRoutes []*MatchedRoute
 	variable      ContextVarObj
 	redirectedTo  string
@@ -49,8 +50,12 @@ func (r *RouteConfig) Match(context Context, router *Router) Element {
 	if currentRoute != nil {
 		// we remove the prefix that was already matched
 		previousPath = path[:len(currentRoute.Path)]
-		path = path[len(currentRoute.Path):]
+	} else {
+		// we add the prefix to the path
+		previousPath = router.Prefix()
 	}
+
+	path = path[len(previousPath):]
 
 	re, err := r.Regexp()
 
@@ -97,6 +102,18 @@ func (r *RouteConfig) Regexp() (*regexp.Regexp, error) {
 	return r.regexp, nil
 }
 
+func (r *Router) Prefix() string {
+	return r.prefix
+}
+
+func (r *Router) SetPrefix(prefix string) {
+	r.prefix = prefix
+}
+
+func (r *Router) URL(path string) string {
+	return fmt.Sprintf("%s%s", r.prefix, path)
+}
+
 func (r *Router) Request() *http.Request {
 	return r.context.Request()
 }
@@ -106,7 +123,7 @@ func (r *Router) Context() Context {
 }
 
 func (r *Router) RedirectTo(path string) {
-	r.redirectedTo = path
+	r.redirectedTo = r.URL(path)
 }
 
 func (r *Router) Query() url.Values {

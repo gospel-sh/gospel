@@ -193,13 +193,16 @@ func (h *HTMLElement) RenderChildren() string {
 
 				if !ok {
 					continue
-				} else if htmlChild == nil {
-					continue
 				}
 			} else {
 				continue
 			}
 
+		}
+
+		// the child element can still be nil
+		if htmlChild == nil {
+			continue
 		}
 
 		renderedChildren += htmlChild.RenderElement()

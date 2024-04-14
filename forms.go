@@ -42,7 +42,7 @@ func (f *FormData) Context() Context {
 
 func (f *FormData) Form(args ...any) Element {
 	return Form(
-		append(args, Input(Type("hidden"), Name("_gspl"), Value(f.id)), Method(f.method)),
+		append(args, Input(Type("hidden"), Name("_gspl"), Value(f.id)), Method(f.method))...,
 	)
 }
 
