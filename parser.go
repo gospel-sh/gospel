@@ -1,3 +1,17 @@
+// Gospel - Golang Simple Extensible Web Framework
+// Copyright (C) 2019-2024 - The Gospel Authors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the 3-Clause BSD License.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// license for more details.
+//
+// You should have received a copy of the 3-Clause BSD License
+// along with this program.  If not, see <https://opensource.org/licenses/BSD-3-Clause>.
+
 package gospel
 
 import (
@@ -87,6 +101,11 @@ func (p *Parser) consumeWhitespace() error {
 }
 
 func (p *Parser) consume(prefix string, allowWhitespace bool) error {
+
+	if len(prefix) > len(p.Source)-p.Pos {
+		return fmt.Errorf("prefix '%s' not found", prefix)
+	}
+
 	str := p.Source[p.Pos:]
 
 	if allowWhitespace {
@@ -146,7 +165,7 @@ func (p *Parser) Parse(source string) (*Program, error) {
 	p.Pos = 0
 	p.Source = source
 
-	if statements, err := p.parseStatements(); err != nil {
+	if statements, err := p.ParseStatements(); err != nil {
 		return nil, err
 	} else {
 		return &Program{
@@ -155,11 +174,11 @@ func (p *Parser) Parse(source string) (*Program, error) {
 	}
 }
 
-func (p *Parser) parseStatements() ([]*Statement, error) {
+func (p *Parser) ParseStatements() ([]*Statement, error) {
 	statements := make([]*Statement, 0, 1)
 
 	for {
-		statement, err := p.parseStatement()
+		statement, err := p.ParseStatement()
 
 		if err != nil {
 			return statements, err
@@ -174,10 +193,10 @@ func (p *Parser) parseStatements() ([]*Statement, error) {
 	}
 }
 
-func (p *Parser) parseStatement() (*Statement, error) {
+func (p *Parser) ParseStatement() (*Statement, error) {
 	if p.has("html ", true) {
 		// this is a HTML statement
-		if htmlStatement, err := p.parseHTMLStatement(); err != nil {
+		if htmlStatement, err := p.ParseHTMLStatement(); err != nil {
 			return nil, err
 		} else {
 			return &Statement{
@@ -187,7 +206,7 @@ func (p *Parser) parseStatement() (*Statement, error) {
 		}
 	} else if p.has("css ", true) {
 		// this is a CSS statement
-		if cssStatement, err := p.parseCSSStatement(); err != nil {
+		if cssStatement, err := p.ParseCSSStatement(); err != nil {
 			return nil, err
 		} else {
 			return &Statement{
@@ -202,7 +221,7 @@ func (p *Parser) parseStatement() (*Statement, error) {
 	return nil, fmt.Errorf("expected a statement, but didn't find one (%d)", p.Pos)
 }
 
-func (p *Parser) parseHTMLStatement() (*HTMLStatement, error) {
+func (p *Parser) ParseHTMLStatement() (*HTMLStatement, error) {
 
 	// we consume the HTML keyword
 	p.consume("html", true)
@@ -213,7 +232,7 @@ func (p *Parser) parseHTMLStatement() (*HTMLStatement, error) {
 	}
 
 	if p.has("template", false) {
-		if template, err := p.parseTemplate(); err != nil {
+		if template, err := p.ParseTemplate(); err != nil {
 			return nil, fmt.Errorf("invalid HTML template statement: %w", err)
 		} else {
 			return &HTMLStatement{
@@ -226,7 +245,7 @@ func (p *Parser) parseHTMLStatement() (*HTMLStatement, error) {
 	return nil, fmt.Errorf("invalid HTML statement")
 }
 
-func (p *Parser) parseTemplate() (*HTMLTemplate, error) {
+func (p *Parser) ParseTemplate() (*HTMLTemplate, error) {
 
 	if err := p.consume("template", false); err != nil {
 		return nil, fmt.Errorf("expected keyword 'template': %w", err)
@@ -244,7 +263,7 @@ func (p *Parser) parseTemplate() (*HTMLTemplate, error) {
 		t.Name = identifier
 	}
 
-	if htmlElement, err := p.parseHTMLElement(); err != nil {
+	if htmlElement, err := p.ParseHTMLElement(); err != nil {
 		return nil, fmt.Errorf("error parsing HTML element: %w", err)
 	} else if htmlElement == nil {
 		return nil, fmt.Errorf("expected a HTML element")
@@ -255,9 +274,9 @@ func (p *Parser) parseTemplate() (*HTMLTemplate, error) {
 	return t, nil
 }
 
-var tagRegexp = regexp.MustCompile(`[a-z][a-z\-]*`)
+var tagRegexp = regexp.MustCompile(`[a-z][a-z\-0-9]*`)
 
-func (p *Parser) parseHTMLChildren() ([]any, error) {
+func (p *Parser) ParseHTMLChildren() ([]any, error) {
 
 	success := false
 	defer p.push(&success)()
@@ -266,22 +285,26 @@ func (p *Parser) parseHTMLChildren() ([]any, error) {
 
 	for {
 
-		if element, err := p.parseHTMLElement(); err != nil {
+		pos := p.Pos
+
+		if element, err := p.ParseHTMLElement(); err != nil {
 			return nil, err
 		} else if element != nil {
 			elements = append(elements, element)
 			continue
 		}
 
-		if element, err := p.parseHTMLTextNode(); err != nil {
+		if element, err := p.ParseHTMLTextNode(); err != nil {
 			return nil, err
 		} else if element != nil {
 			elements = append(elements, element)
 			continue
 		}
 
-		// no more elements
-		break
+		if p.Pos == pos {
+			// we haven't made any progress, no more elements
+			break
+		}
 	}
 
 	success = true
@@ -290,16 +313,16 @@ func (p *Parser) parseHTMLChildren() ([]any, error) {
 
 var htmlTextNodeRegexp = regexp.MustCompile(`(?ms)[^<]*`)
 
-func (p *Parser) parseHTMLTextNode() (*HTMLElement, error) {
+func (p *Parser) ParseHTMLTextNode() (*HTMLElement, error) {
 	if text, err := p.consumeRegexp(htmlTextNodeRegexp); err != nil {
 		return nil, fmt.Errorf("not a text node: %w", err)
 	} else {
 		// we can trim whitespace per HTML spec
-		textValue := strings.TrimSpace(text[0])
-		if len(textValue) == 0 {
+		// textValue := strings.TrimSpace(text[0])
+		if len(text[0]) == 0 {
 			return nil, nil
 		}
-		return Literal(textValue), nil
+		return Literal(text[0]), nil
 	}
 
 }
@@ -308,7 +331,7 @@ var HTMLElementOpenTagError = fmt.Errorf("error parsing HTML element opening tag
 var HTMLElementCloseTagError = fmt.Errorf("error parsing HTML element closing tag")
 var HTMLElementChildrenError = fmt.Errorf("error parsing HTML element children")
 
-func (p *Parser) parseHTMLElement() (*HTMLElement, error) {
+func (p *Parser) ParseHTMLElement() (*HTMLElement, error) {
 
 	if !p.has("<", true) || p.has("</", true) {
 		return nil, nil
@@ -329,10 +352,15 @@ func (p *Parser) parseHTMLElement() (*HTMLElement, error) {
 		e.Tag = tag[0]
 	}
 
-	if attributes, err := p.parseHTMLAttributes(); err != nil {
+	if attributes, err := p.ParseHTMLAttributes(); err != nil {
 		return nil, fmt.Errorf("%w: %w", HTMLElementOpenTagError, err)
 	} else {
 		e.Attributes = attributes
+	}
+
+	if err := p.consume("/>", true); err == nil {
+		// this is an explicitly closed tag, we don't expect any children
+		return e, nil
 	}
 
 	// to do: handle self-closing tags
@@ -340,7 +368,12 @@ func (p *Parser) parseHTMLElement() (*HTMLElement, error) {
 		return nil, fmt.Errorf("%w - expected '>': %w", HTMLElementOpenTagError, err)
 	}
 
-	if children, err := p.parseHTMLChildren(); err != nil {
+	if e.Tag == "meta" || e.Tag == "img" || e.Tag == "style" {
+		// this is a self-closing tag...
+		return e, nil
+	}
+
+	if children, err := p.ParseHTMLChildren(); err != nil {
 		return nil, fmt.Errorf("%w - %w", HTMLElementChildrenError, err)
 	} else {
 		e.Children = children
@@ -359,7 +392,7 @@ var attributeNameRegexp = regexp.MustCompile(`[a-zA-Z][a-zA-Z\-]*`)
 var simpleStringAttributeRegexp = regexp.MustCompile(`[^\s\>]+`)
 var stringAttributeRegex = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
 
-func (p *Parser) parseHTMLAttributes() ([]*HTMLAttribute, error) {
+func (p *Parser) ParseHTMLAttributes() ([]*HTMLAttribute, error) {
 
 	success := false
 	defer p.push(&success)()
@@ -370,7 +403,7 @@ func (p *Parser) parseHTMLAttributes() ([]*HTMLAttribute, error) {
 
 		a := &HTMLAttribute{}
 
-		if p.has(">", true) {
+		if p.has(">", true) || p.has("/>", true) {
 			if err := p.consumeWhitespace(); err != nil {
 				return nil, err
 			}
@@ -401,7 +434,7 @@ func (p *Parser) parseHTMLAttributes() ([]*HTMLAttribute, error) {
 				a.Value = string[1]
 			}
 		} else if p.has("{", false) {
-			if value, err := p.parseExpression("}"); err != nil {
+			if value, err := p.ParseExpression("}"); err != nil {
 				return nil, fmt.Errorf("cannot parse expression: %w", err)
 			} else {
 				a.Value = value
@@ -422,6 +455,6 @@ func (p *Parser) parseHTMLAttributes() ([]*HTMLAttribute, error) {
 	return nil, nil
 }
 
-func (p *Parser) parseCSSStatement() (*CSSStatement, error) {
+func (p *Parser) ParseCSSStatement() (*CSSStatement, error) {
 	return nil, nil
 }
