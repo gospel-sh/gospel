@@ -47,10 +47,10 @@ func MakeRouter(context Context) *Router {
 }
 
 type RouteConfig struct {
-	Route       string
-	regexp      *regexp.Regexp
-	err         error
-	ElementFunc any `graph:"include"`
+	Route       string         `json:"route"`
+	ElementFunc any            `json:"element" graph:"include"`
+	regexp      *regexp.Regexp `json:"-"`
+	err         error          `json:"-"`
 }
 
 func (r *RouteConfig) Match(context Context, router *Router) Element {
@@ -92,6 +92,10 @@ func (r *RouteConfig) Match(context Context, router *Router) Element {
 // generates an element if the route config matches the current route
 func (r *RouteConfig) Generate(c Context) (any, error) {
 	return r.Match(c, UseRouter(c)), nil
+}
+
+func (r *RouteConfig) RenderCode() string {
+	return ""
 }
 
 func (r *RouteConfig) Regexp() (*regexp.Regexp, error) {
@@ -145,10 +149,20 @@ func (r *Router) RedirectedTo() string {
 	return r.redirectedTo
 }
 
-func Route(route string, elementFunc any) *RouteConfig {
+func Route(route string, elementFunc ...any) *RouteConfig {
+
+	var element any
+
+	if len(elementFunc) == 1 {
+		element = elementFunc[0]
+	} else {
+		// we create a fragment
+		element = F(elementFunc...)
+	}
+
 	return &RouteConfig{
 		Route:       route,
-		ElementFunc: elementFunc,
+		ElementFunc: element,
 	}
 }
 
@@ -232,7 +246,6 @@ func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
 				return nil
 			}
 		}
-
 		// we restore the previous route
 		r.PopRoute()
 
@@ -354,4 +367,8 @@ func UseRouter(c Context) *Router {
 
 	return nil
 
+}
+
+func init() {
+	MustRegisterMacro("route", Route)
 }

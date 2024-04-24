@@ -43,20 +43,137 @@ type HTMLElement struct {
 	Decorators []HTMLElementDecorator `json:"-"`
 }
 
+func (h *HTMLElement) RenderCodeChildren() string {
+	renderedChildren := ""
+
+	for _, child := range h.Children {
+
+		if child == nil {
+			continue
+		}
+
+		// we first check if this is a generator
+		if generator, ok := child.(Generator); ok {
+			renderedChildren += generator.RenderCode()
+			continue
+		}
+
+		htmlChild, ok := child.(*HTMLElement)
+
+		if !ok {
+
+			htmlFuncChild, ok := child.(PureElementFunction)
+
+			if ok {
+
+				htmlChild, ok = htmlFuncChild().(*HTMLElement)
+
+				if !ok {
+					continue
+				}
+			} else {
+				continue
+			}
+
+		}
+
+		// the child element can still be nil
+		if htmlChild == nil {
+			continue
+		}
+
+		renderedChildren += htmlChild.RenderCode()
+	}
+
+	return renderedChildren
+}
+
+func (a *HTMLAttribute) RenderCodeAttribute() string {
+
+	if a.Hidden {
+		return ""
+	}
+
+	extraArgs := ""
+
+	if len(a.Args) > 0 {
+
+		for _, arg := range a.Args {
+			if strArg, ok := arg.(string); ok {
+				extraArgs += " " + strArg
+			}
+		}
+
+	}
+
+	if a.Value == nil {
+		return a.Name
+	}
+
+	strValue, ok := a.Value.(string)
+
+	if !ok {
+		return ""
+	}
+
+	return fmt.Sprintf("%s=\"%s%s\"", a.Name, strValue, extraArgs)
+}
+
 func (h *HTMLElement) RenderCode() string {
-	return h.RenderElement()
+
+	if strValue, ok := h.Value.(string); ok {
+		// this is a literal element
+		return strValue
+	}
+
+	renderedAttributes := ""
+
+	for _, attribute := range h.Attributes {
+
+		ra := attribute.RenderCodeAttribute()
+
+		if ra == "" {
+			continue
+		}
+
+		renderedAttributes += " " + ra
+	}
+
+	if h.Void {
+		return fmt.Sprintf("<%[1]s%[2]s/>", h.Tag, renderedAttributes)
+	} else {
+
+		renderedChildren := h.RenderCodeChildren()
+
+		if h.Tag == "" {
+			return renderedChildren
+		}
+
+		return fmt.Sprintf("<%[1]s%[3]s>%[2]s</%[1]s>", h.Tag, renderedChildren, renderedAttributes)
+	}
 }
 
 func (h *HTMLElement) Copy() *HTMLElement {
+
+	newChildren := make([]any, len(h.Children))
+	newArgs := make([]any, len(h.Args))
+	newAttributes := make([]*HTMLAttribute, len(h.Attributes))
+	newDecorators := make([]HTMLElementDecorator, len(h.Decorators))
+
+	copy(newChildren, h.Children)
+	copy(newArgs, h.Args)
+	copy(newAttributes, h.Attributes)
+	copy(newDecorators, h.Decorators)
+
 	return &HTMLElement{
 		Tag:        h.Tag,
 		Void:       h.Void,
 		Value:      h.Value,
 		Safe:       h.Safe,
-		Children:   h.Children,
-		Attributes: h.Attributes,
-		Decorators: h.Decorators,
-		Args:       h.Args,
+		Children:   newChildren,
+		Attributes: newAttributes,
+		Decorators: newDecorators,
+		Args:       newArgs,
 	}
 }
 
@@ -213,6 +330,8 @@ func (h *HTMLElement) RenderChildren() string {
 					continue
 				}
 			} else {
+				// to do: how to handle this?
+				fmt.Printf("Could not render child %T - %v\n", child, child.([]any)[0])
 				continue
 			}
 
@@ -388,7 +507,11 @@ func (h *HTMLElement) Generate(c Context) (any, error) {
 			if element, err := ga.Generate(c); err != nil {
 				return nil, fmt.Errorf("cannot generate argument: %v", err)
 			} else {
-				newChildren = append(newChildren, element)
+				if generatedChildren, ok := element.([]any); ok {
+					newChildren = append(newChildren, generatedChildren...)
+				} else {
+					newChildren = append(newChildren, element)
+				}
 			}
 		} else {
 			newChildren = append(newChildren, child)

@@ -16,6 +16,7 @@ package gospel
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
@@ -287,6 +288,13 @@ func (p *Parser) ParseHTMLChildren() ([]any, error) {
 
 		pos := p.Pos
 
+		if element, err := p.ParseFunctionBlock(); err != nil {
+			return nil, fmt.Errorf("error parsing function block: %w", err)
+		} else if element != nil {
+			elements = append(elements, element)
+			continue
+		}
+
 		if element, err := p.ParseHTMLElement(); err != nil {
 			return nil, err
 		} else if element != nil {
@@ -311,7 +319,7 @@ func (p *Parser) ParseHTMLChildren() ([]any, error) {
 	return elements, nil
 }
 
-var htmlTextNodeRegexp = regexp.MustCompile(`(?ms)[^<]*`)
+var htmlTextNodeRegexp = regexp.MustCompile(`(?ms)[^<\{]*`)
 
 func (p *Parser) ParseHTMLTextNode() (*HTMLElement, error) {
 	if text, err := p.consumeRegexp(htmlTextNodeRegexp); err != nil {
@@ -330,6 +338,278 @@ func (p *Parser) ParseHTMLTextNode() (*HTMLElement, error) {
 var HTMLElementOpenTagError = fmt.Errorf("error parsing HTML element opening tag")
 var HTMLElementCloseTagError = fmt.Errorf("error parsing HTML element closing tag")
 var HTMLElementChildrenError = fmt.Errorf("error parsing HTML element children")
+
+type Macro struct {
+	Value reflect.Value
+}
+
+func (m *Macro) Call(args []any) ([]any, error) {
+
+	ft := m.Value.Type()
+
+	var resultValues []reflect.Value
+
+	if ft.IsVariadic() {
+		// this is a variadic function
+		// we check if we have enough arguments for the regular function arguments
+		if len(args) < ft.NumIn() {
+			return nil, fmt.Errorf("invalid number of regular arguments (expected at least %d, got %d)", ft.NumIn(), len(args))
+		}
+		argValues := make([]reflect.Value, ft.NumIn())
+		// we check that all arguments are assignable
+		for i := 0; i < ft.NumIn()-1; i++ {
+			// we check the types for the non-variadic arguments
+			argType := reflect.TypeOf(args[i])
+
+			if !argType.AssignableTo(ft.In(i)) {
+				return nil, fmt.Errorf("argument %d has the wrong type", i)
+			}
+			// we build the arguments list
+			argValues[i] = reflect.ValueOf(args[i])
+		}
+
+		numVariadicArgs := len(args) - ft.NumIn() + 1
+
+		variadicType := ft.In(ft.NumIn() - 1)
+		variadicArgs := reflect.MakeSlice(variadicType, numVariadicArgs, numVariadicArgs)
+
+		for i := 0; i < numVariadicArgs; i++ {
+			variadicArgs.Index(i).Set(reflect.ValueOf(args[i+ft.NumIn()-1]))
+		}
+		argValues[ft.NumIn()-1] = variadicArgs
+		resultValues = m.Value.CallSlice(argValues)
+
+	} else {
+		// this is a non-variadic function, number of arguments must match exactly
+		if len(args) != ft.NumIn() {
+			return nil, fmt.Errorf("invalid number of arguments (expected %d, got %d)", ft.NumIn(), len(args))
+		}
+
+		argValues := make([]reflect.Value, len(args))
+		// we check that all arguments are assignable
+		for i := 0; i < len(args); i++ {
+			// we check the types
+			argType := reflect.TypeOf(args[i])
+
+			if !argType.AssignableTo(ft.In(i)) {
+				return nil, fmt.Errorf("argument %d has the wrong type", i)
+			}
+
+			// we build the arguments list
+			argValues[i] = reflect.ValueOf(args[i])
+		}
+
+		resultValues = m.Value.Call(argValues)
+	}
+
+	result := make([]any, len(resultValues))
+
+	for i, resultValue := range resultValues {
+		if !resultValue.CanInterface() {
+			return nil, fmt.Errorf("invalid result value")
+		}
+		result[i] = resultValue.Interface()
+	}
+
+	return result, nil
+}
+
+var Macros = map[string]Macro{}
+
+func RegisterMacro(name string, macro any) error {
+	macroType := reflect.TypeOf(macro)
+
+	if macroType.Kind() != reflect.Func {
+		return fmt.Errorf("not a function")
+	}
+
+	Macros[name] = Macro{
+		Value: reflect.ValueOf(macro),
+	}
+
+	return nil
+}
+
+func MustRegisterMacro(name string, macro any) {
+	if err := RegisterMacro(name, macro); err != nil {
+		panic(err)
+	}
+}
+
+type Function struct {
+	Name      string              `json:"name"`
+	Children  []any               `json:"children" graph:"include"`
+	Arguments []*FunctionArgument `json:"arguments" graph:"include"`
+	Result    []any               `json:"result" graph:"include"`
+}
+
+func (f *Function) Generate(c Context) (any, error) {
+	results := []any{}
+
+	for _, result := range f.Result {
+		if result == nil {
+			continue
+		}
+		if generator, ok := result.(Generator); ok {
+			if gr, err := generator.Generate(c); err != nil {
+				return nil, err
+			} else {
+				results = append(results, gr)
+			}
+		} else {
+			// we directly append the result
+			results = append(results, result)
+		}
+	}
+
+	return results, nil
+}
+
+func (f *Function) RenderCode() string {
+	arguments := []string{}
+	for _, argument := range f.Arguments {
+		arguments = append(arguments, argument.RenderCode())
+	}
+	children := []string{}
+	for _, child := range f.Children {
+		if generator, ok := child.(Generator); !ok {
+			// to do: handle this case
+			continue
+		} else {
+			children = append(children, generator.RenderCode())
+		}
+	}
+	return fmt.Sprintf("{:%[1]s %[2]s :}%[3]s{:/%[1]s:}", f.Name, strings.Join(arguments, " "), strings.Join(children, ""))
+}
+
+func (p *Parser) ParseFunctionBlock() (*Function, error) {
+
+	if !p.has("{:", true) || p.has("{:/", true) {
+		return nil, nil
+	}
+
+	success := false
+	defer p.push(&success)()
+
+	if err := p.consume("{:", true); err != nil {
+		return nil, fmt.Errorf("%w - expected '{:': %w", HTMLElementOpenTagError, err)
+	}
+
+	f := &Function{}
+
+	if name, err := p.consumeRegexp(tagRegexp); err != nil {
+		return nil, fmt.Errorf("%w - expected a name: %w", HTMLElementOpenTagError, err)
+	} else {
+		f.Name = name[0]
+	}
+
+	if arguments, err := p.ParseFunctionArguments(); err != nil {
+		return nil, fmt.Errorf("error parsing attributes: %w: %w", HTMLElementOpenTagError, err)
+	} else {
+		f.Arguments = arguments
+	}
+
+	// to do: handle self-closing tags
+	if err := p.consume(":}", true); err != nil {
+		return nil, fmt.Errorf("%w - expected ':}': %w", HTMLElementOpenTagError, err)
+	}
+
+	if children, err := p.ParseHTMLChildren(); err != nil {
+		return nil, fmt.Errorf("%w - %w", HTMLElementChildrenError, err)
+	} else {
+		f.Children = children
+	}
+
+	// we consume the closing name
+	if err := p.consume(fmt.Sprintf("{:/%s:}", f.Name), true); err != nil {
+		return nil, fmt.Errorf("%w - %w", HTMLElementCloseTagError, err)
+	}
+
+	macro, ok := Macros[f.Name]
+
+	if !ok {
+		return nil, fmt.Errorf("unknown macro '%s'", f.Name)
+	}
+
+	argValues := []any{}
+
+	for _, argument := range f.Arguments {
+		argValues = append(argValues, argument.Value)
+	}
+
+	if result, err := macro.Call(append(argValues, f.Children...)); err != nil {
+		return nil, fmt.Errorf("error executing macro '%s': %v", f.Name, err)
+	} else {
+		f.Result = result
+	}
+
+	success = true
+	return f, nil
+
+}
+
+var simpleStringArgumentRegexp = regexp.MustCompile(`[^\s\>]+`)
+var stringArgumentRegex = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
+
+type FunctionArgument struct {
+	Value any
+}
+
+func (f *FunctionArgument) RenderCode() string {
+	if strValue, ok := f.Value.(string); ok {
+		return strValue
+	} else if generator, ok := f.Value.(Generator); ok {
+		return generator.RenderCode()
+	}
+	// to do: handle this case
+	return ""
+}
+
+func (p *Parser) ParseFunctionArguments() ([]*FunctionArgument, error) {
+
+	success := false
+	defer p.push(&success)()
+
+	arguments := make([]*FunctionArgument, 0, 10)
+
+	for {
+
+		a := &FunctionArgument{}
+
+		if p.has(":}", true) || p.has("}", true) {
+			if err := p.consumeWhitespace(); err != nil {
+				return nil, err
+			}
+			// we have reached the end
+			success = true
+			return arguments, nil
+		}
+
+		if err := p.consumeWhitespace(); err != nil {
+			return nil, err
+		}
+
+		if p.has("\"", false) {
+			// this is a string
+			if string, err := p.consumeRegexp(stringArgumentRegex); err != nil {
+				return nil, err
+			} else {
+				a.Value = string[1]
+			}
+		} else {
+			// this is a simple string
+			if value, err := p.consumeRegexp(simpleStringArgumentRegexp); err != nil {
+				return nil, fmt.Errorf("expected a simple argument value: %w", err)
+			} else {
+				a.Value = value[0]
+			}
+		}
+
+		arguments = append(arguments, a)
+	}
+
+	return nil, nil
+}
 
 func (p *Parser) ParseHTMLElement() (*HTMLElement, error) {
 
