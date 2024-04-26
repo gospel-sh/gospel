@@ -53,7 +53,7 @@ type RouteConfig struct {
 	err         error          `json:"-"`
 }
 
-func (r *RouteConfig) Match(context Context, router *Router) Element {
+func (r *RouteConfig) Match(context Context, router *Router, generate bool) (Element, error) {
 
 	path := context.Request().URL.Path
 
@@ -72,7 +72,7 @@ func (r *RouteConfig) Match(context Context, router *Router) Element {
 
 	if err != nil {
 		Log.Warning("Cannot compile route '%s': %v", r.Route, err)
-		return nil
+		return nil, nil
 	}
 
 	// we match against the current path fragment
@@ -84,14 +84,60 @@ func (r *RouteConfig) Match(context Context, router *Router) Element {
 			Path:      previousPath + match[0],
 			Fragments: match[1:],
 		}
-		return context.Element(fmt.Sprintf("route.%s", r.Route), routeElementFunc(router, matchedRoute))
+
+		name := fmt.Sprintf("route.%s", r.Route)
+
+		if generate {
+
+			// to do: simplify this a bit and add a proper sub-context
+
+			// we replace the route with the matched one
+			router.PushRoute(matchedRoute)
+			defer router.PopRoute()
+
+			element, ok := matchedRoute.Config.ElementFunc.(Element)
+
+			if !ok {
+				var err error
+				if element, err = callElementFunc(context, matchedRoute.Config.ElementFunc, matchedRoute.Fragments); err != nil {
+					Log.Error("error in matched route '%s': %v", matchedRoute.Path, err)
+					return nil, err
+				}
+			}
+
+			if generator, ok := element.(Generator); ok {
+				if generatedValue, err := generator.Generate(context); err != nil {
+					return nil, err
+				} else if generatedElement, ok := generatedValue.(Element); !ok {
+					return nil, fmt.Errorf("expected an element")
+				} else {
+					return generatedElement, nil
+				}
+
+			}
+
+			return element, nil
+		}
+
+		return context.Element(name, routeElementFunc(router, matchedRoute)), nil
 	}
-	return nil
+	return nil, nil
 }
 
 // generates an element if the route config matches the current route
 func (r *RouteConfig) Generate(c Context) (any, error) {
-	return r.Match(c, UseRouter(c)), nil
+	element, err := r.Match(c, UseRouter(c), true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if generator, ok := element.(Generator); ok {
+		return generator.Generate(c)
+	} else {
+		return element, nil
+	}
+
 }
 
 func (r *RouteConfig) RenderCode() string {
@@ -226,6 +272,7 @@ type MatchedRoute struct {
 	Path      string
 	Fragments []string
 	Config    *RouteConfig
+	Generate  bool
 }
 
 func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
@@ -246,6 +293,7 @@ func routeElementFunc(r *Router, matchedRoute *MatchedRoute) ElementFunction {
 				return nil
 			}
 		}
+
 		// we restore the previous route
 		r.PopRoute()
 
@@ -343,7 +391,7 @@ func (r *Router) Match(c Context, routeConfigs ...*RouteConfig) Element {
 			continue
 		}
 
-		element := routeConfig.Match(c, r)
+		element, _ := routeConfig.Match(c, r, false)
 
 		// if the route didn't return anything we try the next one...
 		if element == nil && c.RespondWith() == nil && r.RedirectedTo() == "" {

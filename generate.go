@@ -21,19 +21,3 @@ type Generator interface {
 	// render the source code of the generator
 	RenderCode() string
 }
-
-type GeneratorFunction = func(c Context) (any, error)
-
-// Generates a HTML element
-type HTMLElementGenerator struct {
-	HTMLElement
-}
-
-// Generates a HTML attribute
-type HTMLAttributeGenerator struct {
-	HTMLAttribute
-}
-
-func (h *HTMLAttributeGenerator) Generate(c Context) (any, error) {
-	return nil, nil
-}

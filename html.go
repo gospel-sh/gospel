@@ -331,7 +331,7 @@ func (h *HTMLElement) RenderChildren() string {
 				}
 			} else {
 				// to do: how to handle this?
-				fmt.Printf("Could not render child %T - %v\n", child, child.([]any)[0])
+				Log.Warning("Could not render child of type %T", child)
 				continue
 			}
 

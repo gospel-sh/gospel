@@ -322,15 +322,40 @@ func (p *Parser) ParseHTMLChildren() ([]any, error) {
 var htmlTextNodeRegexp = regexp.MustCompile(`(?ms)[^<\{]*`)
 
 func (p *Parser) ParseHTMLTextNode() (*HTMLElement, error) {
-	if text, err := p.consumeRegexp(htmlTextNodeRegexp); err != nil {
-		return nil, fmt.Errorf("not a text node: %w", err)
-	} else {
-		// we can trim whitespace per HTML spec
-		// textValue := strings.TrimSpace(text[0])
-		if len(text[0]) == 0 {
-			return nil, nil
+	textContent := ""
+loop:
+	for {
+		if text, err := p.consumeRegexp(htmlTextNodeRegexp); err != nil {
+			return nil, fmt.Errorf("not a text node: %w", err)
+		} else {
+			textContent += text[0]
+			if p.Pos < len(p.Source) {
+			escapes:
+				switch p.Source[p.Pos] {
+				case '<': // this is a HTML element
+					break
+				case '{': // this might be an expression
+					if p.Pos+1 < len(p.Source) {
+						switch p.Source[p.Pos+1] {
+						case ':': // this is a macro
+							break escapes
+						}
+					}
+					// this isn't a special block, we consume the '{' and continue
+					if err := p.consume("{", false); err != nil {
+						return nil, fmt.Errorf("expected '{': %v", err)
+					}
+					textContent += "{"
+					continue loop
+				}
+			}
+			// we can trim whitespace per HTML spec
+			// textValue := strings.TrimSpace(text[0])
+			if len(textContent) == 0 {
+				return nil, nil
+			}
+			return Literal(textContent), nil
 		}
-		return Literal(text[0]), nil
 	}
 
 }
@@ -648,7 +673,7 @@ func (p *Parser) ParseHTMLElement() (*HTMLElement, error) {
 		return nil, fmt.Errorf("%w - expected '>': %w", HTMLElementOpenTagError, err)
 	}
 
-	if e.Tag == "meta" || e.Tag == "img" || e.Tag == "style" {
+	if e.Tag == "meta" || e.Tag == "img" {
 		// this is a self-closing tag...
 		return e, nil
 	}
