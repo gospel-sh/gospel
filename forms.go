@@ -97,7 +97,7 @@ func MakeFormData(c Context, id, method string) *FormData {
 	return &FormData{
 		context: c,
 		id:      id,
-		method:  "POST",
+		method:  method,
 		data:    data,
 	}
 }

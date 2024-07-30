@@ -261,7 +261,12 @@ func (a *HTMLAttribute) RenderAttribute() string {
 	strValue, ok := a.Value.(string)
 
 	if !ok {
-		return ""
+
+		if stringer, ok := a.Value.(fmt.Stringer); !ok {
+			return ""
+		} else {
+			strValue = stringer.String()
+		}
 	}
 
 	return fmt.Sprintf("%s=\"%s%s\"", html.EscapeString(a.Name), html.EscapeString(strValue), extraArgs)

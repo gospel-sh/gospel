@@ -797,6 +797,10 @@ var BorderTop = Dec("border-top")
 var BorderLeft = Dec("border-left")
 var BorderRight = Dec("border-right")
 
+// individual properties
+var BorderLeftWidth = Dec("border-left-width")
+var BorderRightWidth = Dec("border-right-width")
+
 // Padding
 var Padding = Dec("padding")
 var PaddingTop = Dec("padding-top")
